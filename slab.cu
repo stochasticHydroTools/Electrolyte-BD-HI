@@ -133,7 +133,7 @@ struct Parameters{
   std::string printDPPoissonFarFieldZeroModeFile;
 
   int numberSteps, printSteps, relaxSteps;
-  real dt, viscosity, hydrodynamicRadius;
+  real dt, viscosity, hydrodynamicRadius, wetHydrodynamicRadius;
 
   real gw;
   real split = -1;
@@ -218,7 +218,7 @@ auto createIntegrator(UAMMD sim){
   par.viscosity = sim.par.viscosity;
   par.hydrodynamicRadius = sim.par.hydrodynamicRadius;
   par.dt = sim.par.dt;
-  par.wetRadius = 0.5*sim.par.hydrodynamicRadius;
+  par.wetRadius = sim.par.wetHydrodynamicRadius;
   par.brownianUpdateRule = string2BrownianRule(sim.par.brownianUpdateRule);
   return std::make_shared<BD>(sim.pd, par);
 }
@@ -333,7 +333,8 @@ void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
   if(outf.good())outf<<"#"<<std::endl;
   if(outfield.good())outfield<<"#"<<std::endl;
   fori(0, sim.par.numberParticles){
-    real3 p = box.apply_pbc(make_real3(pos[i]));
+    //real3 p = box.apply_pbc(make_real3(pos[i]));
+    real3 p = make_real3(pos[i]);
     real q = charge[i];
     out<<std::setprecision(2*sizeof(real))<<p<<" "<<q<<"\n";
     if(outf.good()){
@@ -381,20 +382,20 @@ int main(int argc, char *argv[]){
   auto bd = createIntegrator(sim);
   std::shared_ptr<DPPoissonSlab> dpslab;
   if(not sim.par.idealParticles){
-    if(sim.par.triplyPeriodic){
-      bd->addInteractor(createTriplyPeriodicElectrostaticInteractor(sim));
-    }
-    else{
-      dpslab = createDoublyPeriodicElectrostaticInteractor(sim);
-      bd->addInteractor(dpslab);
-    }
+    // if(sim.par.triplyPeriodic){
+    //   bd->addInteractor(createTriplyPeriodicElectrostaticInteractor(sim));
+    // }
+    // else{
+    //   dpslab = createDoublyPeriodicElectrostaticInteractor(sim);
+    //   bd->addInteractor(dpslab);
+    // }
     if(sim.par.U0 > 0){
       bd->addInteractor(createShortRangeInteractor<RepulsivePotential>(sim));
     }
   }
-  if(not sim.par.noWall){
-    bd->addInteractor(createWallRepulsionInteractor(sim));
-  }
+  // if(not sim.par.noWall){
+  //   bd->addInteractor(createWallRepulsionInteractor(sim));
+  // }
   int numberRetries=0;
   int numberRetriesThisStep=0;
   int lastStepSaved=0;
@@ -501,37 +502,38 @@ Parameters readParameters(std::string datamain){
   in.getOption("p", InputFile::Required)>>par.p;
   in.getOption("sigma", InputFile::Required)>>par.sigma;
   in.getOption("readFile", InputFile::Optional)>>par.readFile;
-  in.getOption("gw", InputFile::Required)>>par.gw;
-  in.getOption("tolerance", InputFile::Optional)>>par.tolerance;
-  in.getOption("permitivity", InputFile::Required)>>par.permitivity;
-  if(not par.triplyPeriodic){
-    in.getOption("permitivityTop", InputFile::Required)>>par.permitivityTop;
-    in.getOption("permitivityBottom", InputFile::Required)>>par.permitivityBottom;
-  }
-  if(not par.triplyPeriodic){
-    in.getOption("split", InputFile::Optional)>>par.split;
-  }
-  else{
-    in.getOption("split", InputFile::Required)>>par.split;
-  }
+  in.getOption("wetHydrodynamicRadius", InputFile::Required)>>par.wetHydrodynamicRadius;
+  // in.getOption("gw", InputFile::Required)>>par.gw;
+  // in.getOption("tolerance", InputFile::Optional)>>par.tolerance;
+  // in.getOption("permitivity", InputFile::Required)>>par.permitivity;
+  // if(not par.triplyPeriodic){
+  //   in.getOption("permitivityTop", InputFile::Required)>>par.permitivityTop;
+  //   in.getOption("permitivityBottom", InputFile::Required)>>par.permitivityBottom;
+  // }
+  // if(not par.triplyPeriodic){
+  //   in.getOption("split", InputFile::Optional)>>par.split;
+  // }
+  // else{
+  //   in.getOption("split", InputFile::Required)>>par.split;
+  // }
   in.getOption("Nxy", InputFile::Optional)>>par.Nxy;
   in.getOption("support", InputFile::Optional)>>par.support;
   in.getOption("numberStandardDeviations", InputFile::Optional)>>par.numberStandardDeviations;
   in.getOption("upsampling", InputFile::Optional)>>par.upsampling;
-  if(in.getOption("noWall", InputFile::Optional)){
-    par.noWall= true;
-  }
-  else{
-    in.getOption("wall_U0", InputFile::Required)>>par.wall_U0;
-    in.getOption("wall_r_m", InputFile::Required)>>par.wall_r_m;
-    in.getOption("wall_p", InputFile::Required)>>par.wall_p;
-    in.getOption("wall_sigma", InputFile::Required)>>par.wall_sigma;
-    in.getOption("imageDistanceMultiplier", InputFile::Required)>>par.imageDistanceMultiplier;
-    par.wall_cutOff = par.wall_sigma*pow(2,1.0/par.wall_p);
-  }
-  if(par.split < 0 and par.Nxy < 0){
-    System::log<System::CRITICAL>("ERROR: I need either Nxy or split");
-  }
+  // if(in.getOption("noWall", InputFile::Optional)){
+  //   par.noWall= true;
+  // }
+  // else{
+  //   in.getOption("wall_U0", InputFile::Required)>>par.wall_U0;
+  //   in.getOption("wall_r_m", InputFile::Required)>>par.wall_r_m;
+  //   in.getOption("wall_p", InputFile::Required)>>par.wall_p;
+  //   in.getOption("wall_sigma", InputFile::Required)>>par.wall_sigma;
+  //   in.getOption("imageDistanceMultiplier", InputFile::Required)>>par.imageDistanceMultiplier;
+  //   par.wall_cutOff = par.wall_sigma*pow(2,1.0/par.wall_p);
+  // }
+  // if(par.split < 0 and par.Nxy < 0){
+  //   System::log<System::CRITICAL>("ERROR: I need either Nxy or split");
+  // }
   par.cutOff = par.sigma*pow(2,1.0/par.p);
   in.getOption("BrownianUpdateRule", InputFile::Optional)>>par.brownianUpdateRule;
   if(in.getOption("idealParticles", InputFile::Optional))

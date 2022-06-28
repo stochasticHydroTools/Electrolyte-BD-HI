@@ -196,7 +196,7 @@ public:
     this->brownian_rule = par.brownianUpdateRule;
     sys->log<System::MESSAGE>("[BDWithThermalDrift] Initialized with seed %u", this->seed);
     wetMobility = createWetMobility(par, par.wetRadius);
-    real dryRadius = 1/(1/par.wetRadius + 1/par.hydrodynamicRadius);
+    real dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
     dryMobility = createDryMobility(par, dryRadius);
   }
 
