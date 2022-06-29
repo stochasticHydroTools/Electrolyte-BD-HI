@@ -67,7 +67,14 @@ The following options are available:
  split: The Ewald splitting parameter. It is mandatory if triply periodic mode is enabled.
  Nxy: The number of cells in XY. If this option is present split must NOT be present, it will be computed from this. Nxy can be provided instead of split for doubly periodic mode.
 
- BrownianUpdateRule: Optional. Can either be EulerMaruyama (default) or Leimkuhler.
+  useMobilityFromFile: Optional, if this option is present, the mobility will depend on the height of the particle according to the data in this file.This file must have two columns with a list of normalized heights (so Z must go from -1 to 1) and normalized mobilities (i.e. 6*pi*eta*a*M0) in X, Y and Z. The values for each particle will be linearly interpolated from the data provided in the file. The order of the values does not matter. Example:
+--- mobility.dat---
+-1.0 1.0 1.0 1.0
+ 0.0 1.0 1.0 1.0
+ 1.0 1.0 1.0 1.0
+-------------------
+
+BrownianUpdateRule: Optional. Can either be EulerMaruyama (default) or Leimkuhler.
 
  idealParticles: Optional. If this flag is present particles will not interact between them in any way.
 
@@ -142,6 +149,7 @@ struct Parameters{
   real imageDistanceMultiplier;
 
   std::string outfile, readFile, forcefile, fieldfile;
+  std::string mobilityFile;
 
   bool noWall = false;
   bool triplyPeriodic=false;
@@ -220,6 +228,9 @@ auto createIntegrator(UAMMD sim){
   par.dt = sim.par.dt;
   par.wetRadius = sim.par.wetHydrodynamicRadius;
   par.brownianUpdateRule = string2BrownianRule(sim.par.brownianUpdateRule);
+  par.dryMobilityFile = sim.par.mobilityFile;
+  par.H = sim.par.H;
+  par.Lxy = sim.par.Lxy;
   return std::make_shared<BD>(sim.pd, par);
 }
 
@@ -495,6 +506,7 @@ Parameters readParameters(std::string datamain){
   in.getOption("viscosity", InputFile::Required)>>par.viscosity;
   in.getOption("hydrodynamicRadius", InputFile::Required)>>par.hydrodynamicRadius;
   in.getOption("outfile", InputFile::Required)>>par.outfile;
+  in.getOption("useMobilityFromFile", InputFile::Optional)>>par.mobilityFile;
   in.getOption("forcefile", InputFile::Optional)>>par.forcefile;
   in.getOption("fieldfile", InputFile::Optional)>>par.fieldfile;
   in.getOption("U0", InputFile::Required)>>par.U0;
