@@ -1,5 +1,5 @@
 
-/*Raul P. Pelaez 2020-2021. DP Poisson test
+/*Raul P. Pelaez 2020-2022. Dry and wet diffusion in a slit channel with electrostatic interactions.
 
 This file encodes the following simulation:
 
@@ -44,7 +44,9 @@ The following options are available:
 
  temperature: Temperature for the Brownian Dynamics integrator, the diffusion coefficient will be D=T/(6*pi*viscosity*hydrodynamicRadius). This temperature is therefore given in units of energy.
  viscosity: For BD
- hydrodynamicRadius: For BD
+ hydrodynamicRadius: Total hydrodynamic radius
+ wetHydrodynamicRadius: The wet hydrodynamic radius. AKA the radius given to DPStokes.
+                         The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
  dt: Time step for the BD integrator
 
  U0, sigma, r_m, p: Parameters for the repulsive interaction. If U0=0 the steric repulsion is turned off.
@@ -73,16 +75,12 @@ The following options are available:
  0.0 1.0 1.0 1.0
  1.0 1.0 1.0 1.0
 -------------------
+   If the option is not present the mobility will be autocomputed using DPStokes.
+
 
 BrownianUpdateRule: Optional. Can either be EulerMaruyama (default) or Leimkuhler.
 
  idealParticles: Optional. If this flag is present particles will not interact between them in any way.
-
- The following accuracy options are optional, the defaults provide a tolerance of 5e-4:
- support: Number of support cells for the interpolation kernel. Default is 10.
- numberStandardDeviations: Gaussian truncation. Default is 4
- tolerance: In doubly periodic, determines the cut off for the near field section of the algortihm. In triply periodic mode this represents the overall accuracy of the solver. Default is 1e-4.
- upsampling: The relation between the grid cell size and gt=sqrt(gw^2+1/(4*split^2)). h_xy= gt/upsampling. default is 1.2
 
 
 
@@ -137,13 +135,11 @@ struct Parameters{
   real permitivity, permitivityBottom, permitivityTop;
 
   real bottomWallSurfaceValue = 0;
-  std::string printDPPoissonFarFieldZeroModeFile;
 
   int numberSteps, printSteps, relaxSteps;
   real dt, viscosity, hydrodynamicRadius, wetHydrodynamicRadius;
 
   real gw;
-  real split = -1;
   real U0, sigma, r_m, p, cutOff;
   real wall_U0, wall_sigma, wall_r_m, wall_p, wall_cutOff;
   real imageDistanceMultiplier;
@@ -151,12 +147,15 @@ struct Parameters{
   std::string outfile, readFile, forcefile, fieldfile;
   std::string mobilityFile;
 
-  bool noWall = false;
   bool triplyPeriodic=false;
 
   std::string brownianUpdateRule = "EulerMaruyama";
   bool idealParticles=false;
 
+  int w = 6;
+  real beta = 10.13641758;
+  int nxy_stokes;
+  int nz_stokes;
 };
 
 struct UAMMD{
@@ -231,6 +230,9 @@ auto createIntegrator(UAMMD sim){
   par.dryMobilityFile = sim.par.mobilityFile;
   par.H = sim.par.H;
   par.Lxy = sim.par.Lxy;
+  // par.w = sim.par.w;
+  // par.nxy_stokes = sim.par.nxy_stokes;
+  // par.nz_stokes = sim.par.nz_stokes;
   return std::make_shared<BD>(sim.pd, par);
 }
 
@@ -252,9 +254,6 @@ auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
   par.gw = sim.par.gw;
   par.tolerance = sim.par.tolerance;
   //par.printK0Mode = not sim.par.printDPPoissonFarFieldZeroModeFile.empty();
-  if(sim.par.split>0){
-    par.split = sim.par.split;
-  }
   if(sim.par.upsampling > 0){
     par.upsampling=sim.par.upsampling;
   }
@@ -265,9 +264,6 @@ auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
     par.support=sim.par.support;
   }
   if(sim.par.Nxy > 0){
-    if(sim.par.split>0){
-      System::log<System::CRITICAL>("ERROR: Cannot set both Nxy and split at the same time");
-    }
     par.Nxy = sim.par.Nxy;
   }
   par.support = sim.par.support;
@@ -278,19 +274,6 @@ auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
     //    dppoisson->setSurfaceValuesZeroModeFourier({0, 0, sim.par.bottomWallSurfaceValue, 0});
   }
   return dppoisson;
-}
-
-auto createTriplyPeriodicElectrostaticInteractor(UAMMD sim){
-  Poisson::Parameters par;
-  par.box = Box(make_real3(sim.par.Lxy, sim.par.Lxy, sim.par.H));
-  par.epsilon = sim.par.permitivity;
-  par.gw = sim.par.gw;
-  par.tolerance = sim.par.tolerance;
-  if(sim.par.split<0){
-    System::log<System::CRITICAL>("ERROR: Triply periodic mode needs an splitting parameter (Nxy wont do)");
-  }
-  par.split = sim.par.split;
-  return std::make_shared<Poisson>(sim.pd, par);
 }
 
 auto createWallRepulsionInteractor(UAMMD sim){
@@ -393,20 +376,13 @@ int main(int argc, char *argv[]){
   auto bd = createIntegrator(sim);
   std::shared_ptr<DPPoissonSlab> dpslab;
   if(not sim.par.idealParticles){
-    // if(sim.par.triplyPeriodic){
-    //   bd->addInteractor(createTriplyPeriodicElectrostaticInteractor(sim));
-    // }
-    // else{
-    //   dpslab = createDoublyPeriodicElectrostaticInteractor(sim);
-    //   bd->addInteractor(dpslab);
-    // }
+    dpslab = createDoublyPeriodicElectrostaticInteractor(sim);
+    bd->addInteractor(dpslab);
     if(sim.par.U0 > 0){
       bd->addInteractor(createShortRangeInteractor<RepulsivePotential>(sim));
     }
   }
-  // if(not sim.par.noWall){
-  //   bd->addInteractor(createWallRepulsionInteractor(sim));
-  // }
+  bd->addInteractor(createWallRepulsionInteractor(sim));
   int numberRetries=0;
   int numberRetriesThisStep=0;
   int lastStepSaved=0;
@@ -469,13 +445,6 @@ int main(int argc, char *argv[]){
 	// fieldAtParticles.resize(d_field.size());
 	// thrust::copy(d_field.begin(), d_field.end(), fieldAtParticles.begin());
       }
-      if(dpslab and not sim.par.printDPPoissonFarFieldZeroModeFile.empty()){
-	System::log<System::ERROR>("This functionality is not available");
-	//auto zeroMode = dpslab->getK0Mode();
-	// static std::ofstream zeroModeFile(sim.par.printDPPoissonFarFieldZeroModeFile);
-	// zeroModeFile<<"#\n";
-	// for(auto k0z: zeroMode) zeroModeFile<<k0z.x<<" "<<k0z.y<<" "<<k0z.z<<" "<<k0z.w<<"\n";
-      }
       writeSimulation(sim, fieldAtParticles);
       numberRetriesThisStep=0;
       lastStepSaved=j;
@@ -515,43 +484,30 @@ Parameters readParameters(std::string datamain){
   in.getOption("sigma", InputFile::Required)>>par.sigma;
   in.getOption("readFile", InputFile::Optional)>>par.readFile;
   in.getOption("wetHydrodynamicRadius", InputFile::Required)>>par.wetHydrodynamicRadius;
-  // in.getOption("gw", InputFile::Required)>>par.gw;
-  // in.getOption("tolerance", InputFile::Optional)>>par.tolerance;
-  // in.getOption("permitivity", InputFile::Required)>>par.permitivity;
-  // if(not par.triplyPeriodic){
-  //   in.getOption("permitivityTop", InputFile::Required)>>par.permitivityTop;
-  //   in.getOption("permitivityBottom", InputFile::Required)>>par.permitivityBottom;
-  // }
-  // if(not par.triplyPeriodic){
-  //   in.getOption("split", InputFile::Optional)>>par.split;
-  // }
-  // else{
-  //   in.getOption("split", InputFile::Required)>>par.split;
-  // }
-  in.getOption("Nxy", InputFile::Optional)>>par.Nxy;
-  in.getOption("support", InputFile::Optional)>>par.support;
-  in.getOption("numberStandardDeviations", InputFile::Optional)>>par.numberStandardDeviations;
-  in.getOption("upsampling", InputFile::Optional)>>par.upsampling;
-  // if(in.getOption("noWall", InputFile::Optional)){
-  //   par.noWall= true;
-  // }
-  // else{
-  //   in.getOption("wall_U0", InputFile::Required)>>par.wall_U0;
-  //   in.getOption("wall_r_m", InputFile::Required)>>par.wall_r_m;
-  //   in.getOption("wall_p", InputFile::Required)>>par.wall_p;
-  //   in.getOption("wall_sigma", InputFile::Required)>>par.wall_sigma;
-  //   in.getOption("imageDistanceMultiplier", InputFile::Required)>>par.imageDistanceMultiplier;
-  //   par.wall_cutOff = par.wall_sigma*pow(2,1.0/par.wall_p);
-  // }
-  // if(par.split < 0 and par.Nxy < 0){
-  //   System::log<System::CRITICAL>("ERROR: I need either Nxy or split");
-  // }
+  in.getOption("gw", InputFile::Required)>>par.gw;
+  in.getOption("tolerance", InputFile::Optional)>>par.tolerance;
+  in.getOption("permitivity", InputFile::Required)>>par.permitivity;
+  in.getOption("permitivityTop", InputFile::Required)>>par.permitivityTop;
+  in.getOption("permitivityBottom", InputFile::Required)>>par.permitivityBottom;
+
+  in.getOption("Nxy", InputFile::Required)>>par.Nxy;
+
+  in.getOption("wall_U0", InputFile::Required)>>par.wall_U0;
+  in.getOption("wall_r_m", InputFile::Required)>>par.wall_r_m;
+  in.getOption("wall_p", InputFile::Required)>>par.wall_p;
+  in.getOption("wall_sigma", InputFile::Required)>>par.wall_sigma;
+  in.getOption("imageDistanceMultiplier", InputFile::Required)>>par.imageDistanceMultiplier;
+  par.wall_cutOff = par.wall_sigma*pow(2,1.0/par.wall_p);
   par.cutOff = par.sigma*pow(2,1.0/par.p);
   in.getOption("BrownianUpdateRule", InputFile::Optional)>>par.brownianUpdateRule;
   if(in.getOption("idealParticles", InputFile::Optional))
     par.idealParticles = true;
   in.getOption("bottomWallSurfaceValue", InputFile::Optional)>>par.bottomWallSurfaceValue;
-  in.getOption("printDPPoissonFarFieldZeroModeFile", InputFile::Optional)>>par.printDPPoissonFarFieldZeroModeFile;
+
+  // in.getOption("w", InputFile::Required)>>par.w;
+  // in.getOption("beta", InputFile::Required)>>par.beta;
+  // in.getOption("nxy_stokes", InputFile::Required)>>par.nxy_stokes;
+  // in.getOption("nz_stokes", InputFile::Required)>>par.nz_stokes;
 
   return par;
 }
