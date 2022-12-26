@@ -37,13 +37,13 @@ The three domains demarcated by the walls (above, between and below) may have di
 
 The repulsive potential can be found in RepulsivePotential.cuh (should be available along this file) and has the following form:
 
-$$U_{LJ}(r) = 4*U0* ( (sigma/r)^{2p} - (sigma/r)^p ) + U0$$
+$$U_{LJ}(r) = 4U_0 ( (\sigma/r)^{2p} - (\sigma/r)^p ) + U_0$$
 
-The repulsive force is then defined by parts using $F_{LJ}=-\partial U_{LJ}/\partial r$
+The repulsive force is then defined by parts using $$F_{LJ}=-\partial U_{LJ}/\partial r$$
 
-$$F(r<=r_m) = F_{LJ}(r=r_m)$$
+$$F(r\le r_m) = F_{LJ}(r=r_m)$$
 
-$$F(r_m<r<=\sigma2^{1/p}) = F_{LJ}(r)$$
+$$F(r_m<r\le \sigma2^{1/p}) = F_{LJ}(r)$$
 
 $$F(r>\sigma2^{1/p}) = 0$$
 
