@@ -36,11 +36,16 @@ Charges are repelled by the wall via the same repulsive potential they have betw
 The three domains demarcated by the walls (above, between and below) may have different, arbitrary permittivities.
 
 The repulsive potential can be found in RepulsivePotential.cuh (should be available along this file) and has the following form:
+
 $$U_{LJ}(r) = 4*U0* ( (sigma/r)^{2p} - (sigma/r)^p ) + U0$$
+
 The repulsive force is then defined by parts using $F_{LJ}=-\partial U_{LJ}/\partial r$
-$$F(r<=rm) = F_{LJ}(r=rm)$$
-$$F(rm<r<=sigma*2^1/p) = F_{LJ}(r)$$
-$$F(r>sigma*2^1/p) = 0$$
+
+$$F(r<=r_m) = F_{LJ}(r=r_m)$$
+
+$$F(r_m<r<=\sigma2^{1/p}) = F_{LJ}(r)$$
+
+$$F(r>\sigma2^{1/p}) = 0$$
 
 Hydrodynamic interactions in the slit channel can be incorporated via a wet hydrodynamic radius (using DPStokes).
 The special wet radius equal to zero means neglecting hydrodynamics (pure dry diffusion).
