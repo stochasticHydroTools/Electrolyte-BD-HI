@@ -45,9 +45,9 @@ $$F_{LJ}=-\partial U_{LJ}/\partial r$$
 
 $$F(r\le r_m) = F_{LJ}(r=r_m)$$
 
-$$F(r_m<r\le \sigma2^{1/p}) = F_{LJ}(r)$$
+$$F(r_m<r\le \sigma 2^{1/p}) = F_{LJ}(r)$$
 
-$$F(r>\sigma2^{1/p}) = 0$$
+$$F(r>\sigma 2^{1/p}) = 0$$
 
 Hydrodynamic interactions in the slit channel can be incorporated via a wet hydrodynamic radius (using DPStokes).
 The special wet radius equal to zero means neglecting hydrodynamics (pure dry diffusion).
