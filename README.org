@@ -50,13 +50,13 @@ On the contrary, making the wet radius equal to the total radius results in a pu
 This code expects to find a file called data.main in the folder where it is executed.
 data.main contains a series of parameters that allow to customize the simulation and must have the following  format:
 
-#+begin_quote
+#+begin_example
 ----data.main starts
 #Lines starting with # are ignored
 option [argument] #Anything after the argument is ignored
 flag #An option that does not need arguments
 ----end of data.main
-#+end_quote
+#+end_example
 
 ** The following options are available:
 
@@ -96,13 +96,13 @@ flag #An option that does not need arguments
  *Nxy*: The number of cells in XY. If this option is present split must NOT be present, it will be computed from this. Nxy can be provided instead of split for doubly periodic mode.
 
  *useMobilityFromFile*: Optional, if this option is present, the mobility will depend on the height of the particle according to the data in this file.This file must have two columns with a list of normalized heights (so Z must go from -1 to 1) and normalized mobilities (i.e. 6*pi*eta*a*M0) in X, Y and Z. The values for each particle will be linearly interpolated from the data provided in the file. The order of the values does not matter. Example*:
-#+begin_quote
+#+begin_example
 --- mobility.dat---
 -1.0 1.0 1.0 1.0
  0.0 1.0 1.0 1.0
  1.0 1.0 1.0 1.0
 -------------------
-#+end_quote
+#+end_example
    If the option is not present the mobility will be autocomputed using DPStokes.
 
 
