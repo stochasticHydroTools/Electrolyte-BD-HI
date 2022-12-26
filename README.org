@@ -68,38 +68,60 @@ flag #An option that does not need arguments
 ** The following options are available:
 
  *numberParticles*: The number of charges in the simulation
+ 
  *gw*: The Gaussian width of the charges
+ 
  *H*: The width of the domain
+ 
  *Lxy*: The dimensions of the box in XY
+ 
  *permitivity*: Permittivity inside the slab (only one used in triply periodic mode)
- *permitivityBottom Below z=-H/2. If the value is negative it means metallic boundary (infinite permittivity).
- *permitivityTop Above z=H/2. If the value is negative it means metallic boundary (infinite permittivity).
- *bottomWallSurfaceValue The zero mode value of the Fourier transform of the bottom wall surface value (potential when the boundary is metallic and surface charge otherwise).
+ 
+ *permitivityBottom* Below z=-H/2. If the value is negative it means metallic boundary (infinite permittivity).
+ 
+ *permitivityTop* Above z=H/2. If the value is negative it means metallic boundary (infinite permittivity).
+ 
+ *bottomWallSurfaceValue* The zero mode value of the Fourier transform of the bottom wall surface value (potential when the boundary is metallic and surface charge otherwise).
+ 
  *printDPPoissonFarFieldZeroModeFile*: If present the zero mode of the solution (for Ex, Ey, Ez and phi) in Fourier space for the Far Field in DPPoisson will be printed every printSteps to the provided fileName.
+ 
  *temperature*: Temperature for the Brownian Dynamics integrator, the diffusion coefficient will be D=T/(6*pi*viscosity*hydrodynamicRadius). This temperature is therefore given in units of energy.
+ 
  *viscosity*: For BD
+ 
  *hydrodynamicRadius*: Total hydrodynamic radius
+ 
  *wetHydrodynamicRadius*: The wet hydrodynamic radius. AKA the radius given to DPStokes.
                          The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
+                         
  *dt*: Time step for the BD integrator
+ 
  *U0, sigma, r_m, p*: Parameters for the repulsive interaction. If U0=0 the steric repulsion is turned off.
 
  *wall_U0, wall_sigma, wall_r_m, wall_p* Parameters for the ion-wall repulsive interaction.
+ 
  *imageDistanceMultiplier* Multiplies the distance of the particles to the wall by this amount. For instance, if 2, particles interact with their images, if 1, particles are repelled to the wall (as if the image was at the wall's height)
+ 
  *noWall* Optional, if this flag is present particles will not be repelled by the wall.
 
  *numberSteps*: The simulation will run for this many steps
+ 
  *printSteps*: If greater than 0, the positions and forces will be printed every printSteps steps
+ 
  *relaxSteps*: The simulation will run without printing for this many steps.
 
  *outfile*: Positions and charge will be written to this file, each snapshot is separated by a #, each line will contain X Y Z Charge. Can be /dev/stdout to print to screen.
+ 
  *forcefile*: Optional, if present forces acting on particles will written to this file.
+ 
  *fieldfile*: Optional, if present electric field acting on particles will written to this file.
+ 
  *readFile*: Optional, if present charge positions will be read from this file with the format X Y Z Charge. numberParticles lines will be read. Can be /dev/stdin to read from pipe.
 
  *triplyPeriodic*: Optional, if this flag is present electrostatics will be solved with a triply periodic spectral ewald solver. Notice that many parameters are not needed in this mode and will be ignored.
 
  *split*: The Ewald splitting parameter. It is mandatory if triply periodic mode is enabled.
+ 
  *Nxy*: The number of cells in XY. If this option is present split must NOT be present, it will be computed from this. Nxy can be provided instead of split for doubly periodic mode.
 
  *useMobilityFromFile*: Optional, if this option is present, the mobility will depend on the height of the particle according to the data in this file.This file must have two columns with a list of normalized heights (so Z must go from -1 to 1) and normalized mobilities (i.e. 6*pi*eta*a*M0) in X, Y and Z. The values for each particle will be linearly interpolated from the data provided in the file. The order of the values does not matter. Example*:
