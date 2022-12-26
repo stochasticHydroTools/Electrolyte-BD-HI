@@ -6,7 +6,11 @@
 #include"external/spline.h"
 #include <cmath>
 #include <memory>
-#include"Integrator/BDHI/FCM/FCM_impl.cuh"
+#include "misc/LanczosAlgorithm.cuh"
+#include "Integrator/BDHI/FCM/FCM_impl.cuh"
+#include"Integrator/BDHI/DoublyPeriodic/DPStokesSlab.cuh"
+#include<fstream>
+
 using namespace uammd;
 
 namespace dry_detail{
@@ -114,42 +118,6 @@ public:
 
 };
 
-// class WetMobility{
-//   using DPStokes = DPStokesSlab_ns::DPStokes;
-//   std::shared_ptr<DPStokes> dpstokes;
-
-//   auto createDPStokes(std::shared_ptr<ParticleData> pd){
-//     DPStokes::Parameters par;
-//     par.nx = 1;
-//     par.ny = 1;
-//     par.nz = -1;
-//     par.dt = 1;
-//     par.viscosity = 1;
-//     par.Lx = 0;
-//     par.Ly = 0;
-//     par.H = 0;
-//     par.tolerance = 1e-7;
-//     par.w = 0;
-//     par.w_d = 0;
-//     par.hydrodynamicRadius = 0;
-//     par.beta = -1;
-//     par.beta_d = -1;
-//     par.alpha = -1;
-//     par.alpha_d = -1;
-//     par.mode = DPStokesSlab_ns::WallMode::bottom;
-
-//     return std::make_shared<DPStokes>(pd, par);
-
-//   }
-
-
-// public:
-
-//   WetMobility(std::shared_ptr<ParticleData> pd){
-//     dpstokes = createDPStokes(pd);
-//   }
-
-//};
 
 enum class update_rules { leimkuhler, euler_maruyama };
 
@@ -159,6 +127,11 @@ struct DryParameters: public BD::Parameters{
   std::string dryMobilityFile;
   real Lxy;
   real H;
+
+  // int w;
+  // int nxy_stokes;
+  // int nz_stokes;
+  // real beta;
 };
 
 class WetMobilityFCM{
@@ -204,36 +177,86 @@ public:
 
 };
 
+
+
+namespace dry_detail{
+  BDHI::cached_vector<real3> createGaussianNoise(int size, uint seed){
+    BDHI::cached_vector<real3> dW(size);
+    auto cit = thrust::make_counting_iterator(0);
+    thrust::transform(cit, cit+ size,
+		      dW.begin(),
+		      [=]__device__(int i){
+			Saru rng(seed, i);
+			return make_real3(rng.gf(0,1), rng.gf(0,1).x);
+		      });
+    return dW;
+  }
+}
+
+
+
+//Parameters for a support of w=6
+auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius){
+  real h = hydrodynamicRadius/1.554;
+  int nxy = int(Lxy/h +0.5);
+  DPStokesSlab_ns::DPStokes::Parameters par;
+  par.nx = nxy;
+  par.ny = par.nx;
+  par.nz = int(M_PI*H/(2*h));
+  par.w = 6;
+  par.beta = 1.714*par.w;
+  par.alpha = par.w*0.5;
+  par.mode = DPStokesSlab_ns::WallMode::slit;
+  par.viscosity = viscosity;
+  par.Lx = par.Ly = Lxy;
+  par.H = H;
+  par.tolerance = 1e-4;
+  return par;
+}
+
+using DPStokes = DPStokesSlab_ns::DPStokesIntegrator;
+auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius){
+  auto par = getDPStokesParamtersOnlyForce(Lxy, H, viscosity, hydrodynamicRadius);
+  DPStokes::Parameters pari;
+  pari.nx = par.nx;
+  pari.ny = par.ny;
+  pari.nz = par.nz;
+  pari.w = par.w;
+  pari.beta = par.beta;
+  pari.alpha = par.alpha;
+  pari.mode = DPStokesSlab_ns::WallMode::slit;
+  pari.viscosity = par.viscosity;
+  pari.Lx = par.Lx;
+  pari.Ly= par.Ly;
+  pari.H = H;
+  return pari;
+}
+
 class WetMobilityDPStokes{
-  real m0;
   real temperature;
+  // real tolerance = 1e-4;
   real dt;
-  uint seed1, seed2;
+  // uint seed1, seed2;
   std::shared_ptr<DPStokes> dpstokes;
   std::shared_ptr<ParticleData> pd;
   BDHI::cached_vector<real3> hydrodynamicDisplacements;
+  BDHI::cached_vector<real3> fluctuations, thermalDrift;
+
 public:
   WetMobilityDPStokes(DryParameters par, std::shared_ptr<ParticleData> pd, real wetHydrodynamicRadius):
     pd(pd){
     this->temperature = par.temperature;
     this->dt = par.dt;
-    this->m0 = 1.0/(6*M_PI*par.viscosity*wetHydrodynamicRadius);
-    FCM::Parameters fcm_par;
-    fcm_par.hydrodynamicRadius = wetHydrodynamicRadius;
-    fcm_par.temperature = par.temperature;
-    fcm_par.dt = par.dt;
-    fcm_par.box = Box(128);
-    fcm_par.viscosity = par.viscosity;
-    fcm_par.tolerance = 1e-5;
-    fcm = std::make_shared<FCM>(fcm_par);
+    auto dpstokes_par = getDPStokesIntegratorParamtersOnlyForce(par.Lxy, par.H,
+								par.viscosity, wetHydrodynamicRadius);
+    if(par.brownianUpdateRule == update_rules::leimkuhler) dpstokes_par.useLeimkuhler = true;
+    dpstokes = std::make_shared<DPStokes>(pd, dpstokes_par);
   }
 
   void update(){
-    auto pos = pd->getPos(access::gpu, access::read);
-    auto force = pd->getForce(access::gpu, access::read);
-    auto disp = fcm->computeHydrodynamicDisplacements(pos.raw(), force.raw(), nullptr,
-						      pos.size(), temperature, 1.0, 0);
-    hydrodynamicDisplacements = disp.first;
+    auto disp = dpstokes->computeDeterministicDisplacements();
+    updateFluctuations();
+    hydrodynamicDisplacements = disp;
   }
 
   real3* getDeterministicVelocities(){
@@ -241,18 +264,52 @@ public:
   }
 
   real3* getStochasticVelocities(){
-    return nullptr; //thrust::raw_pointer_cast(hydrodynamicDisplacements.data());
+    return thrust::raw_pointer_cast(fluctuations.data());
+  }
+
+  real3* getThermalDrift(){
+    return thrust::raw_pointer_cast(fluctuations.data());
+  }
+
+  void updateFluctuations(){
+    fluctuations = dpstokes->computeFluctuations();
+    thermalDrift = dpstokes->computeThermalDrift();
   }
 
 };
 
+
+auto computeMobilityDataForDryDiffusion(DryParameters par,
+					std::shared_ptr<ParticleData> pd,
+					real hydrodynamicRadius){
+  auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, hydrodynamicRadius);
+  std::shared_ptr<DPStokesSlab_ns::DPStokes> dpstokes =
+    std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+  constexpr int nsamples = 1000;
+  std::vector<real4> mobilityData(nsamples);
+  for(int i = 0; i<nsamples; i++){
+    real z = -par.H*0.5 + par.H*(i/real(nsamples-1));
+    mobilityData[i].x = z;
+    auto pos = thrust::make_constant_iterator<real4>({0,0,z,0});
+    //Mxx
+    auto disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({1,0,0,0}), 1, 0);
+    //Myy
+    mobilityData[i].y = 6*M_PI*par.viscosity*hydrodynamicRadius*real3(disp[0]).x;
+    disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,1,0,0}), 1, 0);
+    //Mzz
+    mobilityData[i].z = 6*M_PI*par.viscosity*hydrodynamicRadius*real3(disp[0]).y;
+    disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,0,1,0}), 1, 0);
+    mobilityData[i].w = 6*M_PI*par.viscosity*hydrodynamicRadius*real3(disp[0]).z;
+  }
+  return mobilityData;
+}
 
 
 class BDWithDryDiffusion: public BD::BaseBrownianIntegrator{
 public:
   using update_rules = update_rules;
   using DryMobility = DryMobilityWithThermalDrift;
-  using WetMobility = WetMobilityFCM;
+  using WetMobility = WetMobilityDPStokes;
   using Parameters = DryParameters;
 private:
   std::shared_ptr<DryMobility> dryMobility;
@@ -269,7 +326,12 @@ public:
     sys->log<System::MESSAGE>("[BDWithThermalDrift] Initialized with seed %u", this->seed);
     wetMobility = std::make_shared<WetMobility>(par, pd, par.wetRadius);
     real dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
-    dryMobility = std::make_shared<DryMobility>(par, dryRadius, par.dryMobilityFile, par.H);
+    if(par.dryMobilityFile.empty()){
+      auto mobilityData = computeMobilityDataForDryDiffusion(par, pd, dryRadius);
+      dryMobility = std::make_shared<DryMobility>(par, dryRadius, mobilityData, par.H);
+    }
+    else
+      dryMobility = std::make_shared<DryMobility>(par, dryRadius, par.dryMobilityFile, par.H);
   }
 
   void forwardTime() override;
@@ -296,6 +358,7 @@ namespace BDWithThermalDrift_ns{
 			       DryMobility dryMobility,
 			       real3 *wetMF,
 			       real3 *wetBdW,
+			       real3 *wetThermalDrift,
 			       real3* noisePrevious,
 			       real dt,
 			       real temperature,
@@ -316,12 +379,14 @@ namespace BDWithThermalDrift_ns{
       const auto dWn = genNoise(rng);
       const auto noise =  wetnoise + Bn*dWn;
       if(rule == update_rules::euler_maruyama){
-	R += noise + temperature*dt*dry.second;
+	R += noise;
       }
       else if(rule ==update_rules::leimkuhler){
-	R += real(0.5)*(noise+noisePrevious[ori]) + temperature*dt*dry.second;
+	R += real(0.5)*(noise+noisePrevious[ori]);
 	noisePrevious[ori] = noise;
       }
+      //Add thermal drift
+      R += wetThermalDrift[i] + temperature*dt*dry.second;
     }
     pos[i].x = R.x;
     pos[i].y = R.y;
@@ -363,6 +428,7 @@ void BDWithDryDiffusion::updatePositions(){
 				    *dryMobility,
 				    wetMobility->getDeterministicVelocities(),
 				    wetMobility->getStochasticVelocities(),
+				    wetMobility->getThermalDrift(),
 				    thrust::raw_pointer_cast(noisePrevious.data()),
 				    dt,
 				    temperature,
