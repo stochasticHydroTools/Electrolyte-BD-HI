@@ -1,5 +1,6 @@
 
 /*Raul P. Pelaez 2020-2022. Dry and wet diffusion in a slit channel with electrostatic interactions.
+Donev: Why repeat everything from README when we are changing that. It invites inconsistency.
 
 This file encodes the following simulation:
 
@@ -234,6 +235,7 @@ auto createIntegrator(UAMMD sim){
   // par.nxy_stokes = sim.par.nxy_stokes;
   // par.nz_stokes = sim.par.nz_stokes;
   return std::make_shared<BD>(sim.pd, par);
+  // Donev: How is this going to select nx, ny, nz, beta? Is it going to make an FFT friendly grid when choosing h? Is w=4 chosen automatically?
 }
 
 auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
@@ -254,6 +256,7 @@ auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
   par.gw = sim.par.gw;
   par.tolerance = sim.par.tolerance;
   //par.printK0Mode = not sim.par.printDPPoissonFarFieldZeroModeFile.empty();
+  // Donev: Is the above option commented out because printDPPoissonFarFieldZeroModeFile was just for debugging? If so remove it from README
   if(sim.par.upsampling > 0){
     par.upsampling=sim.par.upsampling;
   }
@@ -272,6 +275,7 @@ auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
   if(sim.par.bottomWallSurfaceValue){
     System::log<System::MESSAGE>("[DPPoisson] Setting the bottom wall zero mode Fourier value to %g", sim.par.bottomWallSurfaceValue);
     //    dppoisson->setSurfaceValuesZeroModeFourier({0, 0, sim.par.bottomWallSurfaceValue, 0});
+    // Donev: Why is the above commented out byt the log message is not.
   }
   return dppoisson;
 }

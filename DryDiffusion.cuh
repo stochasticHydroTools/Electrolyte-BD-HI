@@ -134,6 +134,7 @@ struct DryParameters: public BD::Parameters{
   // real beta;
 };
 
+// Donev: I cannot understand where this class or other classes here are actually used. When I search slab.cu there is no mention of WetMobilityFCM or dryDiffusion. How does this work? Can you point me to the actual code for the time loop where FCM is called? ;-)
 class WetMobilityFCM{
   real m0;
   real temperature;
