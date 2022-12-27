@@ -32,6 +32,8 @@ Optionally, a flag can be passed in the input to enable triply periodic electros
 Sources interact via an electrostatic potential and repell each other via a repulsive LJ-like potential.
 
 There are two (potentially) charged walls on $z=-H/2$ and $z=H/2$, this walls have the same charge equal to half of the sum of all charges in the system but with opposite sign (so the overall system is always electroneutral).
+<!--- Donev: It should not always be split in half and anyway it looks wrong to me now since there is an input parameter bottomWallSurfaceValue? --->
+
 Charges are repelled by the wall via the same repulsive potential they have between each other.
 The three domains demarcated by the walls (above, between and below) may have different, arbitrary permittivities.
 
@@ -83,7 +85,7 @@ flag #An option that does not need arguments
  
  *bottomWallSurfaceValue* The zero mode value of the Fourier transform of the bottom wall surface value (potential when the boundary is metallic and surface charge otherwise).
  
- *printDPPoissonFarFieldZeroModeFile*: If present the zero mode of the solution (for Ex, Ey, Ez and phi) in Fourier space for the Far Field in DPPoisson will be printed every printSteps to the provided fileName.
+ *printDPPoissonFarFieldZeroModeFile*: If present the zero mode of the solution (for Ex, Ey, Ez and phi) such as $$\hat{phi}(k_x=0,k_y=0,z)$$ in Fourier space for the Far Field in DPPoisson will be printed every printSteps to the provided fileName.
  
  *temperature*: Temperature for the Brownian Dynamics integrator, the diffusion coefficient will be D=T/(6*pi*viscosity*hydrodynamicRadius). This temperature is therefore given in units of energy.
  
