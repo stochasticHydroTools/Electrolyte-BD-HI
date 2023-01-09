@@ -31,8 +31,9 @@ Optionally, a flag can be passed in the input to enable triply periodic electros
 
 Sources interact via an electrostatic potential and repell each other via a repulsive LJ-like potential.
 
-There are two (potentially) charged walls on $z=-H/2$ and $z=H/2$, this walls have the same charge equal to half of the sum of all charges in the system but with opposite sign (so the overall system is always electroneutral).
-Charges are repelled by the wall via the same repulsive potential they have between each other.
+There are two (potentially) charged walls on $z=-H/2$ and $z=H/2$, this walls have the same charge equal to half of the sum of all charges in the system but with opposite sign (so the overall system is always electroneutral). This is a quirk of the algorithm and cannot be avoided.
+
+Charges are repelled by the wall via the same repulsive potential they have between each other. See option *imageDistanceMultiplier* below.
 The three domains demarcated by the walls (above, between and below) may have different, arbitrary permittivities.
 
 The repulsive potential can be found in RepulsivePotential.cuh (should be available along this file) and has the following form:
@@ -71,7 +72,7 @@ flag #An option that does not need arguments
  
  *gw*: The Gaussian width of the charges
  
- *H*: The width of the domain
+ *H*: The thickness of the domain for periodic and Lz for triply periodic.
  
  *Lxy*: The dimensions of the box in XY
  
@@ -85,12 +86,12 @@ flag #An option that does not need arguments
  
  *temperature*: Temperature for the Brownian Dynamics integrator, the diffusion coefficient will be D=T/(6*pi*viscosity*hydrodynamicRadius). This temperature is therefore given in units of energy.
  
- *viscosity*: For BD
+ *viscosity*: For wet diffusion in BD
  
  *hydrodynamicRadius*: Total hydrodynamic radius
  
- *wetHydrodynamicRadius*: The wet hydrodynamic radius. AKA the radius given to DPStokes.
-                         The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
+ *wetHydrodynamicRadius*: The wet hydrodynamic radius, i.e., the radius given to DPStokes.
+The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
                          
  *dt*: Time step for the BD integrator
  
@@ -120,7 +121,8 @@ flag #An option that does not need arguments
  
  *Nxy*: The number of cells in XY. If this option is present split must NOT be present, it will be computed from this. Nxy can be provided instead of split for doubly periodic mode.
 
- *useMobilityFromFile*: Optional, if this option is present, the mobility will depend on the height of the particle according to the data in this file.This file must have two columns with a list of normalized heights (so Z must go from -1 to 1) and normalized mobilities (i.e. 6*pi*eta*a*M0) in X, Y and Z. The values for each particle will be linearly interpolated from the data provided in the file. The order of the values does not matter. Example*:
+ *useMobilityFromFile*: Optional, if this option is present, the mobility will depend on the height of the particle according to the data in this file.This file must have two columns with a list of normalized heights (so Z must go from -1 to 1) and normalized mobilities (i.e. 6*pi*eta*a) in X, Y and Z. The values for each particle will be linearly interpolated from the data provided in the file. The order of the values does not matter.
+ Example:
 #+begin_example
 --- mobility.dat---
 -1.0 1.0 1.0 1.0
@@ -134,5 +136,4 @@ flag #An option that does not need arguments
 *BrownianUpdateRule*: Optional. Can either be EulerMaruyama (default) or Leimkuhler.
 
 *idealParticles*: Optional. If this flag is present particles will not interact between them in any way.
-
 

@@ -1,5 +1,4 @@
-
-/*Raul P. Pelaez 2020-2022. Dry and wet diffusion in a slit channel with electrostatic interactions.
+/*Raul P. Pelaez 2020-2023. Dry and wet diffusion in a slit channel with electrostatic interactions.
 */
 #include"uammd.cuh"
 #include"RepulsivePotential.cuh"
