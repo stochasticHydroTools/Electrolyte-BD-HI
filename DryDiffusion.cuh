@@ -1,4 +1,67 @@
-/*Raul P. Pelaez 2022.
+/*Raul P. Pelaez 2022.  This  file provides an UAMMD Integrator called
+  DryWetBD.  The Integrator separates the dynamics into two parts, one
+  is dry (i.e  neglecting hydrodynamic interactions) and  the wet part
+  has  an  increased  hydrodynamic radius  but  includes  hydrodynamic
+  interactions.
+
+  In particular the DryWetBD Integrator encodes a slit channel geometry.
+
+  The Wet part uses the DPStokes  UAMMD module, while the Dry part has
+  a selfmobility that depends on the height (thus  including thermal
+  drift).
+
+  The Dry part works by either reading a file with mobilities (see the
+  main code  for instructions)  or by  precomputing the  self mobility
+  DPStokes  with the  dry radius  and then  spline interpolating  when
+  necessary.
+
+  The resulting  dynamics neglect near  field hydrodynamics up  to the
+  dry  radius,  but  otherwise  represent a  BDHI  simulation  with  a
+  hydrodynamic radius given by:
+
+  a_total^{-1} = a_dry^{-1} + a_wet^{-1}
+
+  This Integrator has the following parameters:
+
+  real hydrodynamicRadius = -1.0: Total hydrodynamic radius
+  real wetRadius: The hydrodynamic radius of the wet part update_rules
+  brownianUpdateRule:  Can be  either update_rules::euler_maruyama  or
+  update_rules::leimkuhler
+
+  std::string dryMobilityFile: Optional. The name of a file containing
+  the mobility information  for the mobility. If  present the mobility
+  will depend on  the height of the particle according  to the data in
+  this file.This file must have two  columns with a list of normalized
+  heights  (so Z  must  go from  -1 to  1)  and normalized  mobilities
+  (i.e. 6*pi*eta*a*M0)  in X, Y  and Z.  The values for  each particle
+  will  be  linearly  interpolated  from  the  data  provided  in  the
+  file. The order of the values does not matter. Example:
+
+  --- mobility.dat---
+  -1.0 1.0 1.0 1.0
+  0.0 1.0 1.0 1.0
+  1.0 1.0 1.0 1.0
+  -------------------
+  If the option is not present the mobility will be autocomputed using
+  DPStokes.
+
+  real Lxy: Size of the domain in the plane
+  real H: Height of the domain
+  real temperature = 0: Temperature in kT
+  real viscosity = 1
+  real dt = 0: Time step
+
+
+  Notes: The  DPStokes module  requires partitioning  the domain  in a
+  grid with a  size that depends on the hydrodynamic  radius, thus the
+  radius cannot be enforced exactly in  general (it can be enforced by
+  modifying the box dimensions to be a multiple of the cell size for a
+  given hydrodynamic  radius).  Alternatively, the grid  and ES kernel
+  parameters can be provided for DPStokes, which allow a fine external
+  control of this. This functionality is not currently exposed by this
+  interface,  but  this   is  an  easy  modification,   which  can  be
+  implemented  by  providing  the  parameters  to  DPStokes  (see  the
+  constructor of the WetMobilityDPStokes class).
  */
 #include"uammd.cuh"
 #include"Integrator/BrownianDynamics.cuh"
@@ -15,7 +78,16 @@ using namespace uammd;
 
 namespace dry_detail{
 
-  auto splineMobility(std::vector<real4> &data){
+  //This function receives  as input a vector  containing an arbitrary
+  //number of points (3 minimum) storing data for the self mobility at
+  //different heights.  It returns  three splines, allowing  to sample
+  //the mobility  at any  point.  The  data must  contain data  for at
+  //least the two domain limits.  The format of the data is: data[i] =
+  //{z[i],  Mxx(z[i]), Myy(z[i]),  Mzz(z[i])}
+  //The mobilities must be normalized by 6*pi*eta*a The height must be
+  //normalized by H/2 (meaning that the walls are at +-1).
+  auto splineMobility(const std::vector<real4> &data){
+    if(data.size() <3) throw std::runtime_error("splineMobility requires at least three points");
     //The spline library needs input data in ascending order
     std::sort(data.begin(), data.end(),[](real4 a, real4 b){return a.x<b.x;});
     std::vector<double> Z(data.size());
@@ -33,14 +105,22 @@ namespace dry_detail{
     return std::make_tuple(mobilityx, mobilityy, mobilityz);
   }
 
-  //Reads the height vs the three self mobilities from the file
+  //Reads the height vs the three self mobilities from the file, returns a vector of real4 values, each one containing a line of the file, which must comply with the following format:
+  //The mobilities must be normalized by 6*pi*eta*a. The height must be
+  //normalized by H/2 (meaning that the walls are at +-1).
+  //Each line of the file must contain: z Mxx(z) Myy(z) Mzz(z).
+  //The format of the data is: data[i] = {z[i],  Mxx(z[i]), Myy(z[i]),  Mzz(z[i])}
   auto readMobilityFile(std::string fileName){
     std::ifstream in(fileName);
     std::istream_iterator<real4> begin(in), end;
     std::vector<real4> data{begin, end};
     return data;
   }
-  //Returns a functor that returns the derivative of "y" at any point via spline interpolation
+
+  //Returns a spline functor that returns the derivative of "y" at any
+  //point  via spline  interpolation The  input is  any callable,  for
+  //instance  a spline.  N  is the  number of  sample  points used  to
+  //construct the spline for the derivative.
   template<class Functor>
   auto computeDerivative(Functor y, int N){
     std::vector<double> derivative(N,0);
@@ -60,6 +140,13 @@ namespace dry_detail{
     return sy;
   }
 
+  //Constructs a  tabulated function for  GPU use, allowing  to sample
+  //Mxx, Myy, Mzz,  div(Mzz) for any height, stored as  a simple real4
+  //value.  The  data must contain  data for  at least the  two domain
+  //limits.  The  format of the  data is: data[i] =  {z[i], Mxx(z[i]),
+  //Myy(z[i]),  Mzz(z[i])}  The  mobilities   must  be  normalized  by
+  //6*pi*eta*a The height must be  normalized by H/2 (meaning that the
+  //walls are at +-1).
   auto initializeTable(std::vector<real4> &data, real Lz){
     tk::spline mobilityx, mobilityy, mobilityz;
     std::tie(mobilityx, mobilityy, mobilityz) = dry_detail::splineMobility(data);
@@ -71,29 +158,44 @@ namespace dry_detail{
 
 }
 
-//The () operator of this struct must return the normalized self mobility and its derivative when given a position,
-// i.e returning 6*pi*eta*a*{M0(x,y,z), \nabla M0(x,y,z)}
+//This class provides the dry part of the mobility.
+//The  () operator  of this  class returns  the normalized  self
+// mobility and  its derivative when  given a position,  i.e returning
+// 6*pi*eta*a*{Mxx(z), Myy(z), Mzz(z), \nabla Mzz(z)}
 class DryMobilityWithThermalDrift{
   TabulatedFunction<real4> mobilityAndDerivative;
   real Lz;
   real m0;
 public:
 
-  DryMobilityWithThermalDrift(BD::Parameters par, real dryHydrodynamicRadius, std::vector<real4> data, real Lz):Lz(Lz){
+  //This constructor requires a  viscosity, a dry hydrodynamic radius,
+  //the height  of the domain  and a  vector with mobility  data.  The
+  //data must  contain data for at  least the two domain  limits.  The
+  //format  of the  data is:  data[i] =  {z[i], Mxx(z[i]),  Myy(z[i]),
+  //Mzz(z[i])}  The mobilities  must be  normalized by  6*pi*eta*a The
+  //height must  be normalized by H/2  (meaning that the walls  are at
+  //+-1).
+  DryMobilityWithThermalDrift(real viscosity, real dryHydrodynamicRadius, std::vector<real4> data, real Lz):Lz(Lz){
     System::log<System::MESSAGE>("[SelfMobility] Initialized, Lz=%g", Lz);
     dry_detail::initializeTable(data, Lz);
-    this->m0 = 1.0/(6*M_PI*par.viscosity*dryHydrodynamicRadius);
+    this->m0 = 1.0/(6*M_PI*viscosity*dryHydrodynamicRadius);
   }
 
-  DryMobilityWithThermalDrift(BD::Parameters par, real dryHydrodynamicRadius,
+  //This constructor requires a  viscosity, a dry hydrodynamic radius,
+  //the  height of  the  domain  and the  name  of  a file  containing
+  //mobility data as required by the readMobilityFile function.
+  DryMobilityWithThermalDrift(real viscosity, real dryHydrodynamicRadius,
 			      std::string fileName, real Lz):Lz(Lz){
     System::log<System::MESSAGE>("[SelfMobility] Initialized, Lz=%g", Lz);
     auto data = dry_detail::readMobilityFile(fileName);
     this->mobilityAndDerivative = dry_detail::initializeTable(data, Lz);
-    this->m0 = 1.0/(6*M_PI*par.viscosity*dryHydrodynamicRadius);
+    this->m0 = 1.0/(6*M_PI*viscosity*dryHydrodynamicRadius);
   }
 
-  //The position received by this function will be folded to the main cell.
+  //Given a  position this  function returns  the self  mobility (Mxx,
+  //Myy,  Mzz) and  the  divergence of  Mzz with  respect  to z.   The
+  //position received by this function will be folded to the main cell
+  //(-0.5, 0.5) in the third direction.
   __device__ auto operator()(real3 pos){
     real z = (pos.z - floor(pos.z/Lz + real(0.5))*Lz)/Lz; //Height in the [-0.5,0.5] interval
     const auto MandDiffM = mobilityAndDerivative(real(2.0)*z);
@@ -104,82 +206,28 @@ public:
 
 };
 
-class DryMobility{
-  real m0;
-public:
-  DryMobility(BD::Parameters par, real dryHydrodynamicRadius){
-    this->m0 = 1.0/(6*M_PI*par.viscosity*dryHydrodynamicRadius);
-  }
-
-  __device__ auto operator()(real3 pos){
-    return thrust::make_pair(make_real3(m0), make_real3(0, 0, 0));
-  }
-
-
-};
-
-
+//An enumerator  to distinguish  between the different  update schemes
+//accepted by WetDryBD
 enum class update_rules { leimkuhler, euler_maruyama };
 
-struct DryParameters: public BD::Parameters{
+//Parameters for the WetDryBD Integrator
+struct WetDryParameters: BD::Parameters{
   real wetRadius;
   update_rules brownianUpdateRule;
   std::string dryMobilityFile;
   real Lxy;
   real H;
-
   // int w;
   // int nxy_stokes;
   // int nz_stokes;
   // real beta;
 };
 
-class WetMobilityFCM{
-  real m0;
-  real temperature;
-  real dt;
-  uint seed1, seed2;
-  using FCM = BDHI::FCM_impl<BDHI::FCM_ns::Kernels::Gaussian, BDHI::FCM_ns::Kernels::GaussianTorque>;
-  std::shared_ptr<FCM> fcm;
-  std::shared_ptr<ParticleData> pd;
-  BDHI::cached_vector<real3> hydrodynamicDisplacements;
-public:
-  WetMobilityFCM(BD::Parameters par, std::shared_ptr<ParticleData> pd, real wetHydrodynamicRadius):
-    pd(pd){
-    this->temperature = par.temperature;
-    this->dt = par.dt;
-    this->m0 = 1.0/(6*M_PI*par.viscosity*wetHydrodynamicRadius);
-    FCM::Parameters fcm_par;
-    fcm_par.hydrodynamicRadius = wetHydrodynamicRadius;
-    fcm_par.temperature = par.temperature;
-    fcm_par.dt = par.dt;
-    fcm_par.box = Box(128);
-    fcm_par.viscosity = par.viscosity;
-    fcm_par.tolerance = 1e-5;
-    fcm = std::make_shared<FCM>(fcm_par);
-  }
-
-  void update(){
-    auto pos = pd->getPos(access::gpu, access::read);
-    auto force = pd->getForce(access::gpu, access::read);
-    auto disp = fcm->computeHydrodynamicDisplacements(pos.raw(), force.raw(), nullptr,
-						      pos.size(), temperature, 1.0, 0);
-    hydrodynamicDisplacements = disp.first;
-  }
-
-  real3* getDeterministicVelocities(){
-    return thrust::raw_pointer_cast(hydrodynamicDisplacements.data());
-  }
-
-  real3* getStochasticVelocities(){
-    return nullptr; //thrust::raw_pointer_cast(hydrodynamicDisplacements.data());
-  }
-
-};
-
-
-
 namespace dry_detail{
+
+  //Returns  a  vector  of  size  size  filled  with  random  gaussian
+  //distributed  numbers with  mean  0  and std  1.  Using the  second
+  //argument as seed.
   BDHI::cached_vector<real3> createGaussianNoise(int size, uint seed){
     BDHI::cached_vector<real3> dW(size);
     auto cit = thrust::make_counting_iterator(0);
@@ -193,9 +241,10 @@ namespace dry_detail{
   }
 }
 
-
-
-//Parameters for a support of w=6
+//From the box size (Lxy in the  plane and H in height), viscosity and
+//a hydrodynamic radius this function returns the parameters needed by
+//DPStokes. Parameters for a support of w=6 according to the paper
+//Note that this function does not set the temperature nor the time step.
 auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius){
   real h = hydrodynamicRadius/1.554;
   int nxy = int(Lxy/h +0.5);
@@ -214,6 +263,11 @@ auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrod
   return par;
 }
 
+//This  boilerplate  function  only  exists because  the  two  classes
+//exposing   the   DPStokes   algorithm   in   UAMMD   (DPStokes   and
+//DPStokesIntegrator)  use   slightly  different  structs   for  their
+//parameters. This function calls getDPStokesParameters and adapts the
+//output.
 using DPStokes = DPStokesSlab_ns::DPStokesIntegrator;
 auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius){
   auto par = getDPStokesParamtersOnlyForce(Lxy, H, viscosity, hydrodynamicRadius);
@@ -232,59 +286,53 @@ auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, r
   return pari;
 }
 
+//This class provides the wet part of the mobility. It exposes functions to get the different terms in the BDHI equation (mainly MF, BdW and kT div(M)).
 class WetMobilityDPStokes{
-  real temperature;
-  // real tolerance = 1e-4;
-  real dt;
-  // uint seed1, seed2;
   std::shared_ptr<DPStokes> dpstokes;
   std::shared_ptr<ParticleData> pd;
-  BDHI::cached_vector<real3> hydrodynamicDisplacements;
-  BDHI::cached_vector<real3> fluctuations, thermalDrift;
-
+  BDHI::cached_vector<real3> hydrodynamicDisplacements, fluctuations, thermalDrift;
 public:
-  WetMobilityDPStokes(DryParameters par, std::shared_ptr<ParticleData> pd, real wetHydrodynamicRadius):
+  //This constructor requires a ParticleData instance and a WetDryParameters
+  WetMobilityDPStokes(WetDryParameters par, std::shared_ptr<ParticleData> pd):
     pd(pd){
-    this->temperature = par.temperature;
-    this->dt = par.dt;
     auto dpstokes_par = getDPStokesIntegratorParamtersOnlyForce(par.Lxy, par.H,
-								par.viscosity, wetHydrodynamicRadius);
-    if(par.brownianUpdateRule == update_rules::leimkuhler) dpstokes_par.useLeimkuhler = true;
+								par.viscosity, par.wetRadius);
+    dpstokes_par.dt = par.dt;
+    dpstokes_par.temperature = par.temperature;
     dpstokes = std::make_shared<DPStokes>(pd, dpstokes_par);
   }
 
+  //Update the DPStokesIntegrator with the latest particle positions and forces
   void update(){
-    auto disp = dpstokes->computeDeterministicDisplacements();
-    updateFluctuations();
-    hydrodynamicDisplacements = disp;
-  }
-
-  real3* getDeterministicVelocities(){
-    return thrust::raw_pointer_cast(hydrodynamicDisplacements.data());
-  }
-
-  real3* getStochasticVelocities(){
-    return thrust::raw_pointer_cast(fluctuations.data());
-  }
-
-  real3* getThermalDrift(){
-    return thrust::raw_pointer_cast(fluctuations.data());
-  }
-
-  void updateFluctuations(){
+    hydrodynamicDisplacements = dpstokes->computeDeterministicDisplacements();
     fluctuations = dpstokes->computeFluctuations();
     thermalDrift = dpstokes->computeThermalDrift();
   }
 
+  //Provides a pointer to the deterministic displacements: MF
+  real3* getDeterministicVelocities(){
+    return thrust::raw_pointer_cast(hydrodynamicDisplacements.data());
+  }
+
+  //Provides a pointer to the stochastic displacements: BdW
+  real3* getStochasticVelocities(){
+    return thrust::raw_pointer_cast(fluctuations.data());
+  }
+
+  //Provides a pointer to the thermal drift term: kT*dt div_z(M)
+  real3* getThermalDrift(){
+    return thrust::raw_pointer_cast(thermalDrift.data());
+  }
 };
 
-
-auto computeMobilityDataForDryDiffusion(DryParameters par,
-					std::shared_ptr<ParticleData> pd,
+//Computes a vector with mobility data  as required by the Dry part of
+//the  mobility. Uses  the  DPStokes algorithm  with the  hydrodynamic
+//radius  in  the second  argument  and  samples the  selfmobility  at
+//several heights.
+auto computeMobilityDataForDryDiffusion(WetDryParameters par,
 					real hydrodynamicRadius){
   auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, hydrodynamicRadius);
-  std::shared_ptr<DPStokesSlab_ns::DPStokes> dpstokes =
-    std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+  auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
   constexpr int nsamples = 1000;
   std::vector<real4> mobilityData(nsamples);
   for(int i = 0; i<nsamples; i++){
@@ -305,29 +353,34 @@ auto computeMobilityDataForDryDiffusion(DryParameters par,
 }
 
 
-class BDWithDryDiffusion: public BD::BaseBrownianIntegrator{
+//This class  provides an Integrator for  the BDHI equation in  a slit
+// channel by separating each term into two contributions: A wet and a
+// dry part.  Both the dry and  wet parts are provided  by the classes
+// above    (DryMobilityWithThermalDrift    and    WetMobilityDPStokes
+// respectively)
+class DryWetBD: public BD::BaseBrownianIntegrator{
 public:
   using update_rules = update_rules;
   using DryMobility = DryMobilityWithThermalDrift;
   using WetMobility = WetMobilityDPStokes;
-  using Parameters = DryParameters;
+  using Parameters = WetDryParameters;
 private:
   std::shared_ptr<DryMobility> dryMobility;
   std::shared_ptr<WetMobility> wetMobility;
-  thrust::device_vector<real3> noisePrevious;
+  thrust::device_vector<real3> noisePrevious; //Used to store the noise of the previous step in Leimkuhler
   update_rules brownian_rule;
 public:
-  BDWithDryDiffusion(shared_ptr<ParticleData> pd,
-		     Parameters par):
+  DryWetBD(shared_ptr<ParticleData> pd,
+	   Parameters par):
     BaseBrownianIntegrator(pd, par){
     this->seed = sys->rng().next32();
     this->steps = 0;
     this->brownian_rule = par.brownianUpdateRule;
     sys->log<System::MESSAGE>("[BDWithThermalDrift] Initialized with seed %u", this->seed);
-    wetMobility = std::make_shared<WetMobility>(par, pd, par.wetRadius);
+    wetMobility = std::make_shared<WetMobility>(par, pd);
     real dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
     if(par.dryMobilityFile.empty()){
-      auto mobilityData = computeMobilityDataForDryDiffusion(par, pd, dryRadius);
+      auto mobilityData = computeMobilityDataForDryDiffusion(par, dryRadius);
       dryMobility = std::make_shared<DryMobility>(par, dryRadius, mobilityData, par.H);
     }
     else
@@ -342,14 +395,21 @@ private:
 
 
 namespace BDWithThermalDrift_ns{
-  using update_rules = BDWithDryDiffusion::update_rules;
-
+  using update_rules = DryWetBD::update_rules;
+  //Draws three Gaussian random numbers from the rng
   __device__ real3 genNoise(Saru &rng){
     return make_real3(rng.gf(0, 1), rng.gf(0, 1).x);
   }
 
-  //This integration scheme allows for a self mobility depending on the position.
-  //With the associated non-zero thermal drift term.
+  //Adds to each particle the displacement coming from the dry and wet parts of the BDHI eq.
+  //It encodes two update schemes.
+  //Euler Maruyama
+  // dX^n = dt*( (MF + BdW + kTdiv_z(M))^n_wet + (MF + BdW + kTdiv_z(M))^n_dry)
+  //Leimkuhler
+  // dX^n = dt*( (MF + kTdiv_z(M))^n_wet + (MF + kTdiv_z(M))^n_dry
+  //+ 0.5((BdW)^n_dry+(BdW)^{n-1}_dry)dt
+  //+ 0.5((BdW)^{n-1}_wet+(BdW)^{n-1}_wet)dt
+  //)
   template<update_rules rule, class DryMobility>
   __global__ void integrateGPU(real4* pos,
 			       ParticleGroup::IndexIterator indexIterator,
@@ -395,7 +455,8 @@ namespace BDWithThermalDrift_ns{
 
 }
 
-void BDWithDryDiffusion::forwardTime(){
+//Takes the particles to the next time step
+void DryWetBD::forwardTime(){
   steps++;
   sys->log<System::DEBUG1>("[BD::Leimkuhler] Performing integration step %d", steps);
   updateInteractors();
@@ -404,14 +465,11 @@ void BDWithDryDiffusion::forwardTime(){
   updatePositions();
 }
 
-void BDWithDryDiffusion::updatePositions(){
+void DryWetBD::updatePositions(){
   int numberParticles = pg->getNumberParticles();
   noisePrevious.resize(numberParticles);
   if(steps==1)
     thrust::fill(noisePrevious.begin(), noisePrevious.end(), real3());
-  int BLOCKSIZE = 128;
-  uint Nthreads = BLOCKSIZE<numberParticles?BLOCKSIZE:numberParticles;
-  uint Nblocks = numberParticles/Nthreads +  ((numberParticles%Nthreads!=0)?1:0);
   auto groupIterator = pg->getIndexIterator(access::location::gpu);
   auto pos = pd->getPos(access::location::gpu, access::mode::readwrite);
   auto force = pd->getForce(access::location::gpu, access::mode::read);
@@ -421,6 +479,9 @@ void BDWithDryDiffusion::updatePositions(){
   if(brownian_rule == update_rules::leimkuhler){
     foo =  integrateGPU<update_rules::leimkuhler, DryMobility>;
   }
+  int BLOCKSIZE = 128;
+  uint Nthreads = BLOCKSIZE<numberParticles?BLOCKSIZE:numberParticles;
+  uint Nblocks = numberParticles/Nthreads +  ((numberParticles%Nthreads!=0)?1:0);
   foo<<<Nblocks, Nthreads, 0, st>>>(pos.raw(),
 				    groupIterator,
 				    originalIndex,

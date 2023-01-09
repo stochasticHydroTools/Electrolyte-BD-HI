@@ -1,89 +1,5 @@
 
 /*Raul P. Pelaez 2020-2022. Dry and wet diffusion in a slit channel with electrostatic interactions.
-
-This file encodes the following simulation:
-
-A group of Gaussian sources of charge with width gw evolve via Brownian Dynamics inside a doubly periodic domain of dimensions Lxy, Lxy, H (periodic in XY and open in Z).
-Optionally, a flag can be passed in the input to enable triply periodic electrostatics.
-
-Sources interact via an electrostatic potential and repell each other via a repulsive LJ-like potential.
-
-There are two (potentially) charged walls on z=-H/2 and z=H/2, this walls have the same charge equal to half of the sum of all charges in the system but with opposite sign (so the overall system is always electroneutral).
-Charges are repelled by the wall via the same repulsive potential they have between each other.
-The three domains demarcated by the walls (above, between and below) may have different, arbitrary permittivities.
-
-The repulsive potential can be found in RepulsivePotential.cuh (should be available along this file) and has the following form:
-U_{LJ}(r) = 4*U0* ( (sigma/r)^{2p} - (sigma/r)^p ) + U0
-The repulsive force is then defined by parts using F_{LJ}=-\partial U_{LJ}/\partial r
-F(r<=rm) = F_{LJ}(r=rm);
-F(rm<r<=sigma*2^1/p) = F_{LJ}(r);
-F(r>sigma*2^1/p) = 0;
-
-USAGE:
-This code expects to find a file called data.main in the folder where it is executed.
-data.main contains a series of parameters that allow to customize the simulation and must have the following  format:
-
-----data.main starts
-#Lines starting with # are ignored
-option [argument] #Anything after the argument is ignored
-flag #An option that does not need arguments
-----end of data.main
-
-The following options are available:
-
- numberParticles: The number of charges in the simulation
- gw: The Gaussian width of the charges
-
- H: The width of the domain
- Lxy: The dimensions of the box in XY
- permitivity: Permittivity inside the slab (only one used in triply periodic mode)
- permitivityBottom Below z=-H/2. If the value is negative it means metallic boundary (infinite permittivity).
- permitivityTop Above z=H/2. If the value is negative it means metallic boundary (infinite permittivity).
- bottomWallSurfaceValue The zero mode value of the Fourier transform of the bottom wall surface value (potential when the boundary is metallic and surface charge otherwise).
- printDPPoissonFarFieldZeroModeFile: If present the zero mode of the solution (for Ex, Ey, Ez and phi) in Fourier space for the Far Field in DPPoisson will be printed every printSteps to the provided fileName.
-
- temperature: Temperature for the Brownian Dynamics integrator, the diffusion coefficient will be D=T/(6*pi*viscosity*hydrodynamicRadius). This temperature is therefore given in units of energy.
- viscosity: For BD
- hydrodynamicRadius: Total hydrodynamic radius
- wetHydrodynamicRadius: The wet hydrodynamic radius. AKA the radius given to DPStokes.
-                         The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
- dt: Time step for the BD integrator
-
- U0, sigma, r_m, p: Parameters for the repulsive interaction. If U0=0 the steric repulsion is turned off.
-
- wall_U0, wall_sigma, wall_r_m, wall_p Parameters for the ion-wall repulsive interaction.
- imageDistanceMultiplier Multiplies the distance of the particles to the wall by this amount. For instance, if 2, particles interact with their images, if 1, particles are repelled to the wall (as if the image was at the wall's height)
- noWall Optional, if this flag is present particles will not be repelled by the wall.
-
- numberSteps: The simulation will run for this many steps
- printSteps: If greater than 0, the positions and forces will be printed every printSteps steps
- relaxSteps: The simulation will run without printing for this many steps.
-
- outfile: Positions and charge will be written to this file, each snapshot is separated by a #, each line will contain X Y Z Charge. Can be /dev/stdout to print to screen.
- forcefile: Optional, if present forces acting on particles will written to this file.
- fieldfile: Optional, if present electric field acting on particles will written to this file.
- readFile: Optional, if present charge positions will be read from this file with the format X Y Z Charge. numberParticles lines will be read. Can be /dev/stdin to read from pipe.
-
- triplyPeriodic: Optional, if this flag is present electrostatics will be solved with a triply periodic spectral ewald solver. Notice that many parameters are not needed in this mode and will be ignored.
-
- split: The Ewald splitting parameter. It is mandatory if triply periodic mode is enabled.
- Nxy: The number of cells in XY. If this option is present split must NOT be present, it will be computed from this. Nxy can be provided instead of split for doubly periodic mode.
-
-  useMobilityFromFile: Optional, if this option is present, the mobility will depend on the height of the particle according to the data in this file.This file must have two columns with a list of normalized heights (so Z must go from -1 to 1) and normalized mobilities (i.e. 6*pi*eta*a*M0) in X, Y and Z. The values for each particle will be linearly interpolated from the data provided in the file. The order of the values does not matter. Example:
---- mobility.dat---
--1.0 1.0 1.0 1.0
- 0.0 1.0 1.0 1.0
- 1.0 1.0 1.0 1.0
--------------------
-   If the option is not present the mobility will be autocomputed using DPStokes.
-
-
-BrownianUpdateRule: Optional. Can either be EulerMaruyama (default) or Leimkuhler.
-
- idealParticles: Optional. If this flag is present particles will not interact between them in any way.
-
-
-
 */
 #include"uammd.cuh"
 #include"RepulsivePotential.cuh"
@@ -212,14 +128,14 @@ UAMMD initialize(int argc, char *argv[]){
 }
 
 auto string2BrownianRule(std::string str) {
-  if(str == "EulerMaruyama") return BDWithDryDiffusion::update_rules::euler_maruyama;
-  else if(str =="Leimkuhler")   return BDWithDryDiffusion::update_rules::leimkuhler;
+  if(str == "EulerMaruyama") return DryWetBD::update_rules::euler_maruyama;
+  else if(str =="Leimkuhler")   return DryWetBD::update_rules::leimkuhler;
   else
     throw std::runtime_error("Invalid brownian rule");
 }
 
 auto createIntegrator(UAMMD sim){
-  using BD = BDWithDryDiffusion;
+  using BD = DryWetBD;
   BD::Parameters par;
   par.temperature = sim.par.temperature;
   par.viscosity = sim.par.viscosity;
@@ -253,7 +169,6 @@ auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
   par.permitivity = perm;
   par.gw = sim.par.gw;
   par.tolerance = sim.par.tolerance;
-  //par.printK0Mode = not sim.par.printDPPoissonFarFieldZeroModeFile.empty();
   if(sim.par.upsampling > 0){
     par.upsampling=sim.par.upsampling;
   }
@@ -271,7 +186,7 @@ auto createDoublyPeriodicElectrostaticInteractor(UAMMD sim){
   auto dppoisson = std::make_shared<DPPoissonSlab>(sim.pd, par);
   if(sim.par.bottomWallSurfaceValue){
     System::log<System::MESSAGE>("[DPPoisson] Setting the bottom wall zero mode Fourier value to %g", sim.par.bottomWallSurfaceValue);
-    //    dppoisson->setSurfaceValuesZeroModeFourier({0, 0, sim.par.bottomWallSurfaceValue, 0});
+    dppoisson->setSurfaceValuesZeroModeFourier({0, 0, sim.par.bottomWallSurfaceValue, 0});
   }
   return dppoisson;
 }
