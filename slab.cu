@@ -62,11 +62,10 @@ struct Parameters{
   std::string outfile, readFile, forcefile, fieldfile;
   std::string mobilityFile;
 
-  bool triplyPeriodic=false;
 
   std::string brownianUpdateRule = "EulerMaruyama";
   bool idealParticles=false;
-
+  bool noElectrostatics=false;
   int w = 6;
   real beta = 10.13641758;
   int nxy_stokes;
@@ -220,9 +219,7 @@ template<class UsePotential> auto createShortRangeInteractor(UAMMD sim){
   real Lxy = sim.par.Lxy;
   real H = sim.par.H;
   params.box = Box(make_real3(Lxy, Lxy, H));
-  if(not sim.par.triplyPeriodic){
-    params.box.setPeriodicity(1,1,0);
-  }
+  params.box.setPeriodicity(1,1,0);
   auto pairForces = std::make_shared<SR>(sim.pd, params, pot);
   return pairForces;
 }
@@ -235,7 +232,7 @@ void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
   static std::ofstream outf(sim.par.forcefile);
   static std::ofstream outfield(sim.par.fieldfile);
   Box box(make_real3(sim.par.Lxy, sim.par.Lxy, sim.par.H));
-  box.setPeriodicity(1,1,sim.par.triplyPeriodic?1:0);
+  box.setPeriodicity(1,1,0);
   real3 L = box.boxSize;
   out<<"#Lx="<<L.x*0.5<<";Ly="<<L.y*0.5<<";Lz="<<L.z*0.5<<";"<<std::endl;
   if(outf.good())outf<<"#"<<std::endl;
@@ -290,8 +287,10 @@ int main(int argc, char *argv[]){
   auto bd = createIntegrator(sim);
   std::shared_ptr<DPPoissonSlab> dpslab;
   if(not sim.par.idealParticles){
-    dpslab = createDoublyPeriodicElectrostaticInteractor(sim);
-    bd->addInteractor(dpslab);
+    if(not sim.par.noElectrostatics){
+      dpslab = createDoublyPeriodicElectrostaticInteractor(sim);
+      bd->addInteractor(dpslab);
+    }
     if(sim.par.U0 > 0){
       bd->addInteractor(createShortRangeInteractor<RepulsivePotential>(sim));
     }
@@ -305,52 +304,50 @@ int main(int argc, char *argv[]){
   constexpr int maximumRetriesPerStep=1e4;
   forj(0, sim.par.relaxSteps){
     bd->forwardTime();
-    if(not sim.par.triplyPeriodic){
-      if(checkWallOverlap(sim)){
-	numberRetries++;
-	if(numberRetries>maximumRetries){
-	  throw std::runtime_error("Too many steps with wall overlapping charges detected, aborting run");
-	}
-	numberRetriesThisStep++;
-	if(numberRetriesThisStep>maximumRetriesPerStep){
-	  throw std::runtime_error("Cannot recover from configuration with wall overlapping charges, aborting run");
-	}
-	j=lastStepSaved;
-	restoreLastSavedConfiguration(sim);
-	continue;
+    if(checkWallOverlap(sim)){
+      numberRetries++;
+      if(numberRetries>maximumRetries){
+	throw std::runtime_error("Too many steps with wall overlapping charges detected, aborting run");
       }
-      if(j%saveRate==0){
-	numberRetriesThisStep = 0;
-	lastStepSaved=j;
-	saveConfiguration(sim);
+      numberRetriesThisStep++;
+      if(numberRetriesThisStep>maximumRetriesPerStep){
+	throw std::runtime_error("Cannot recover from configuration with wall overlapping charges, aborting run");
       }
+      j=lastStepSaved;
+      restoreLastSavedConfiguration(sim);
+      continue;
     }
+    if(j%saveRate==0){
+      numberRetriesThisStep = 0;
+      lastStepSaved=j;
+      saveConfiguration(sim);
+    }
+
   }
   Timer tim;
   tim.tic();
   lastStepSaved=0;
   forj(0, sim.par.numberSteps){
     bd->forwardTime();
-    if(not sim.par.triplyPeriodic){
-      if(checkWallOverlap(sim)){
-	numberRetries++;
-	if(numberRetries>maximumRetries){
-	  throw std::runtime_error("Too many steps with wall overlapping charges detected, aborting run");
-	}
-	numberRetriesThisStep++;
-	if(numberRetriesThisStep>maximumRetriesPerStep){
-	  throw std::runtime_error("Cannot recover from configuration with wall overlapping charges, aborting run");
-	}
-	j=lastStepSaved;
-	restoreLastSavedConfiguration(sim);
-	continue;
+    if(checkWallOverlap(sim)){
+      numberRetries++;
+      if(numberRetries>maximumRetries){
+	throw std::runtime_error("Too many steps with wall overlapping charges detected, aborting run");
       }
-      if(j%saveRate==0){
-	numberRetriesThisStep=0;
-	lastStepSaved=j;
-	saveConfiguration(sim);
+      numberRetriesThisStep++;
+      if(numberRetriesThisStep>maximumRetriesPerStep){
+	throw std::runtime_error("Cannot recover from configuration with wall overlapping charges, aborting run");
       }
+      j=lastStepSaved;
+      restoreLastSavedConfiguration(sim);
+      continue;
     }
+    if(j%saveRate==0){
+      numberRetriesThisStep=0;
+      lastStepSaved=j;
+      saveConfiguration(sim);
+    }
+
     if(sim.par.printSteps > 0 and j%sim.par.printSteps==0){
       std::vector<real4> fieldAtParticles;
       if(not sim.par.fieldfile.empty() and dpslab){
@@ -374,10 +371,6 @@ int main(int argc, char *argv[]){
 Parameters readParameters(std::string datamain){
   InputFile in(datamain);
   Parameters par;
-  if(in.getOption("triplyPeriodic", InputFile::Optional)){
-    par.triplyPeriodic= true;
-  }
-
   in.getOption("Lxy", InputFile::Required)>>par.Lxy;
   in.getOption("H", InputFile::Required)>>par.H;
   in.getOption("numberSteps", InputFile::Required)>>par.numberSteps;
@@ -416,6 +409,9 @@ Parameters readParameters(std::string datamain){
   in.getOption("BrownianUpdateRule", InputFile::Optional)>>par.brownianUpdateRule;
   if(in.getOption("idealParticles", InputFile::Optional))
     par.idealParticles = true;
+  if(in.getOption("noElectrostatics", InputFile::Optional))
+    par.noElectrostatics = true;
+
   in.getOption("bottomWallSurfaceValue", InputFile::Optional)>>par.bottomWallSurfaceValue;
 
   // in.getOption("w", InputFile::Required)>>par.w;
