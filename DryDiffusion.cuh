@@ -86,7 +86,7 @@ namespace dry_detail{
   //{z[i],  Mxx(z[i]), Myy(z[i]),  Mzz(z[i])}
   //The mobilities must be normalized by 6*pi*eta*a The height must be
   //normalized by H/2 (meaning that the walls are at +-1).
-  auto splineMobility(const std::vector<real4> &data){
+  auto splineMobility(std::vector<real4> &data){
     if(data.size() <3) throw std::runtime_error("splineMobility requires at least three points");
     //The spline library needs input data in ascending order
     std::sort(data.begin(), data.end(),[](real4 a, real4 b){return a.x<b.x;});
@@ -381,10 +381,10 @@ public:
     real dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
     if(par.dryMobilityFile.empty()){
       auto mobilityData = computeMobilityDataForDryDiffusion(par, dryRadius);
-      dryMobility = std::make_shared<DryMobility>(par, dryRadius, mobilityData, par.H);
+      dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, mobilityData, par.H);
     }
     else
-      dryMobility = std::make_shared<DryMobility>(par, dryRadius, par.dryMobilityFile, par.H);
+      dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, par.dryMobilityFile, par.H);
   }
 
   void forwardTime() override;
