@@ -93,8 +93,9 @@ flag #An option that does not need arguments
  *hydrodynamicRadius*: Total hydrodynamic radius
  
  *wetHydrodynamicRadius*: The wet hydrodynamic radius, i.e., the radius given to DPStokes.
-The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
-                         
+   The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
+   If the wet radius is negative, full dry is considered.
+   If the wet radius is equal or larger than the hydrodynamic radius, full wet is considered and wet radius is overriden to min(wetHydrodynamicRadius, hydrodynamicRadius)
  *dt*: Time step for the BD integrator
  
  *U0, sigma, r_m, p*: Parameters for the repulsive interaction. If U0=0 the steric repulsion is turned off.
