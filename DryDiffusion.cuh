@@ -167,6 +167,8 @@ class DryMobilityWithThermalDrift{
   real Lz;
   real m0;
 public:
+  //The default constructor
+  DryMobilityWithThermalDrift(){}
 
   //This constructor requires a  viscosity, a dry hydrodynamic radius,
   //the height  of the domain  and a  vector with mobility  data.  The
@@ -373,6 +375,9 @@ private:
   std::shared_ptr<WetMobility> wetMobility;
   thrust::device_vector<real3> noisePrevious; //Used to store the noise of the previous step in Leimkuhler
   update_rules brownian_rule;
+  bool isFullWet = false;
+  bool isFullDry = false;
+
 public:
   DryWetBD(shared_ptr<ParticleData> pd,
 	   Parameters par):
@@ -381,14 +386,37 @@ public:
     this->steps = 0;
     this->brownian_rule = par.brownianUpdateRule;
     sys->log<System::MESSAGE>("[BDWithThermalDrift] Initialized with seed %u", this->seed);
-    wetMobility = std::make_shared<WetMobility>(par, pd);
-    real dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
-    if(par.dryMobilityFile.empty()){
-      auto mobilityData = computeMobilityDataForDryDiffusion(par, dryRadius);
-      dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, mobilityData, par.H);
+    real dryRadius;
+    if(par.wetRadius <= 0){
+      dryRadius = par.hydrodynamicRadius;
+      this->isFullDry = true;
+      sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full dry mode");
     }
-    else
-      dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, par.dryMobilityFile, par.H);
+    else{
+      if(par.wetRadius > par.hydrodynamicRadius){
+	par.wetRadius = par.hydrodynamicRadius;
+	dryRadius = 0;
+      }
+      else{
+	dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
+      }
+      wetMobility = std::make_shared<WetMobility>(par, pd);
+    }
+    if(dryRadius > 0){
+      sys->log<System::MESSAGE>("[BDWithThermalDrift] Dry radius is: %g", dryRadius);
+      sys->log<System::MESSAGE>("[BDWithThermalDrift] Wet radius is: %g", par.wetRadius);
+      if(par.dryMobilityFile.empty()){
+	auto mobilityData = computeMobilityDataForDryDiffusion(par, dryRadius);
+	dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, mobilityData, par.H);
+      }
+      else
+	dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, par.dryMobilityFile, par.H);
+    }
+    else{
+      sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full wet mode");
+      this->isFullWet = true;
+      dryMobility = std::make_shared<DryMobility>(); //A dummy instance
+    }
   }
 
   void forwardTime() override;
@@ -424,6 +452,7 @@ namespace BDWithThermalDrift_ns{
 			       real3 *wetBdW,
 			       real3 *wetThermalDrift,
 			       real3* noisePrevious,
+			       bool isFullWet,
 			       real dt,
 			       real temperature,
 			       int N,
@@ -433,8 +462,9 @@ namespace BDWithThermalDrift_ns{
     int i = indexIterator[id];
     real3 R = make_real3(pos[i]);
     const real3 F = make_real3(force[i]);
-    const auto dry = dryMobility(R);
-    R += dt*(dry.first*F + wetMF[i]);
+    const auto dry = isFullWet?thrust::make_pair(real3(), real3()):dryMobility(R);
+    auto wetMF_ = wetMF?wetMF[i]:real3();
+    R += dt*(dry.first*F + wetMF_);
     if(temperature > 0){
       int ori = originalIndex[i];
       Saru rng(ori, stepNum, seed);
@@ -450,7 +480,8 @@ namespace BDWithThermalDrift_ns{
 	noisePrevious[ori] = noise;
       }
       //Add thermal drift
-      R += wetThermalDrift[i] + temperature*dt*dry.second;
+      auto wetTD = wetThermalDrift?wetThermalDrift[i]:real3();
+      R += wetTD + temperature*dt*dry.second;
     }
     pos[i].x = R.x;
     pos[i].y = R.y;
@@ -465,7 +496,9 @@ void DryWetBD::forwardTime(){
   sys->log<System::DEBUG1>("[BD::Leimkuhler] Performing integration step %d", steps);
   updateInteractors();
   computeCurrentForces();
-  wetMobility->update();
+  if(not isFullDry){
+    wetMobility->update();
+  }
   updatePositions();
 }
 
@@ -495,6 +528,7 @@ void DryWetBD::updatePositions(){
 				    wetMobility->getStochasticVelocities(),
 				    wetMobility->getThermalDrift(),
 				    thrust::raw_pointer_cast(noisePrevious.data()),
+				    this->isFullWet,
 				    dt,
 				    temperature,
 				    numberParticles,
