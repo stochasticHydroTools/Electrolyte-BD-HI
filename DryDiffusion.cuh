@@ -291,6 +291,7 @@ class WetMobilityDPStokes{
   std::shared_ptr<DPStokes> dpstokes;
   std::shared_ptr<ParticleData> pd;
   BDHI::cached_vector<real3> hydrodynamicDisplacements, fluctuations, thermalDrift;
+  real temperature = 0;
 public:
   //This constructor requires a ParticleData instance and a WetDryParameters
   WetMobilityDPStokes(WetDryParameters par, std::shared_ptr<ParticleData> pd):
@@ -299,14 +300,17 @@ public:
 								par.viscosity, par.wetRadius);
     dpstokes_par.dt = par.dt;
     dpstokes_par.temperature = par.temperature;
+    this->temperature = par.temperature;
     dpstokes = std::make_shared<DPStokes>(pd, dpstokes_par);
   }
 
   //Update the DPStokesIntegrator with the latest particle positions and forces
   void update(){
     hydrodynamicDisplacements = dpstokes->computeDeterministicDisplacements();
-    fluctuations = dpstokes->computeFluctuations();
-    thermalDrift = dpstokes->computeThermalDrift();
+    if(temperature){
+      fluctuations = dpstokes->computeFluctuations();
+      thermalDrift = dpstokes->computeThermalDrift();
+    }
   }
 
   //Provides a pointer to the deterministic displacements: MF
