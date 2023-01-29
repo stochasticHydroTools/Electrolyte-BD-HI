@@ -53,6 +53,35 @@ $$F(r\gt \sigma 2^{1/p}) = 0$$
 Hydrodynamic interactions in the slit channel can be incorporated via a wet hydrodynamic radius (using DPStokes).
 The special wet radius equal to zero means neglecting hydrodynamics (pure dry diffusion).
 On the contrary, making the wet radius equal to the total radius results in a pure wet diffusion simulation.
+* Compilation
+This code depends on:
+1. CUDA
+2. MKL or Lapack+blas
+If you conda available, you can install everything you need to compile with:
+#+begin_src bash
+  conda install -c nvidia cuda mkl-devel cmake make 
+#+end_src
+Two methods of compilation are available: Make and CMake
+Tests can only be compiled using CMake
+** Make
+To use Make, you will have to tweak the Makefile according to your system and the simply run:
+  #+begin_src bash
+    $ make
+  #+end_src
+This will compile slab.cu into slab.
+
+** CMake
+CMake will try to autodetect the necessary paths in your system. You can compile both slab.cu and the tests with:
+   #+begin_src bash
+     $ mkdir -p build
+     $ cd build
+     $ cmake ..
+     $ make
+   #+end_src
+ It is possible that CMake complains about some missing dependency (maybe MKL, or Lapack/blas), in this case you have to install said dependency and then run cmake again.
+ 
+* Tests
+Some unit tests are available in tests.cu. They use [Gtest](https://github.com/google/googletest). CMake will autodownload it for you. Compile with CMake and then run ./tests
 
 * USAGE:
 This code expects to find a file called data.main in the folder where it is executed.
