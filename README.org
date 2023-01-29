@@ -86,6 +86,8 @@ CMake will try to autodetect the necessary paths in your system. You can compile
  #+end_src
 * Tests
 Some unit tests are available in tests.cu. They use [[https://github.com/google/googletest][Gtest]]. CMake will autodownload it for you. Compile with CMake and then run ./tests
+Gtest provides a lot of useful functionality for dealing with tests (for instance, running only a subset of them). Try ./tests --help
+
 
 * USAGE:
 This code expects to find a file called data.main in the folder where it is executed.
