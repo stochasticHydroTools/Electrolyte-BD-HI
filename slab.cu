@@ -1,4 +1,66 @@
-/*Raul P. Pelaez 2020-2023. Dry and wet diffusion in a slit channel with electrostatic interactions.
+/*Raul P.  Pelaez 2020-2023. Dry and  wet diffusion in a  slit channel
+  with electrostatic interactions.
+
+  About this code
+  ------------------
+
+  Besides including many functionalities  from UAMMD, this source also
+  includes two headers that are part of this particular project. These
+  are:
+  1.  RepulsivePotential:  The  definition   of  a  LJ-like  potential
+  compatible with UAMMD
+  2.  DryDiffusion:  An UAMMD  Integrator  that  mixes UAMMD's  Doubly
+  Periodic Stokes  Integrator with  a bare-diffusion  Integrator. This
+  allows   to  separate   the  mobility   in  two   parts,  one   with
+  hydro. interactions  for the far  field (expensive) and one  for the
+  self mobility (fast).
+
+  This source is organized as a series of functions and utility structures.
+
+  Many  of  this  functions   are  called  createSomething.  In  these
+  instances, Something refers to some UAMMD-related structure, such as
+  the Integrator or the class that takes care of electrostatics.
+
+  The physical domain being simulated is  walled, and as such is prone
+  to a particular error where a  particle teleports outside a wall due
+  to numerical error.  This source includes a functionality consisting
+  of saving the  simulation state every few steps and  rewinding it in
+  the  case of  something  like this  happening.  These functions  are
+  checkOverlap, saveConfiguration, restoreLastSavedConfiguration,...
+
+  The initialization of  the UAMMD structures and  the main simulation
+  loop is carried  out in main().  The length of  this function is due
+  to  the implementation  of the  rewind functionality,  which in  its
+  current state suffers from a lot of code repetition.
+
+  Basicaly, initialization comes  by calling createIntegrator followed
+  by  a series  of calls  to  addInteractor (which  adds a  particular
+  interaction to the Integrator) depending  on the options.  Then, the
+  simulation is taken  to the next step by calling  forwardTime on the
+  Integrator.   Every now  and then  the  state of  the simulation  is
+  probed via sim.pd (an instance  of ParticleData, the UAMMD structure
+  that holds particle states) and written to disk.
+
+  This code  is GPU enabled  via CUDA, which sometimes  requires doing
+  things in  a kind of  convoluted manner. For instance,  the function
+  checkOverlap  requires  defining  a structure  called  CheckOverlap,
+  whose operator() member  has a fancy __device__  decorator.  Then, a
+  thrust  algorithm is  used  to find  possible  overlaps.  You  might
+  wonder  why a  simple loop  cannot be  used here.  We could  do that
+  following the  rules of CUDA,  but the  boiler plate would  be worse
+  and, you'll  have to believe  me, the  resulting code would  be even
+  more obtuse  (and inefficient, for  what is worth).
+
+  In CUDA, and in general when writting parallel code in C++, thinking
+  in   terms  of   these  "algorithms"   (such  as   copy,  transform,
+  find_if,...) is  many times "the  way", in terms  of expressiveness,
+  efficiency  and   versatility.   For  instance,  we   can  make  the
+  checkOverlap   function   run  in   the   CPU   just  by   replacing
+  thrust::cuda::par by thrust::cuda::host. Or the other way around. So
+  once you learn to think in  data-driven algorithms, you can get away
+  with  not learning  to code  in  a GPU,  since switching  to a  CUDA
+  implementation consists of changing a simple word.
+
 */
 #include"uammd.cuh"
 #include"RepulsivePotential.cuh"
@@ -352,9 +414,6 @@ int main(int argc, char *argv[]){
       std::vector<real4> fieldAtParticles;
       if(not sim.par.fieldfile.empty() and dpslab){
 	System::log<System::ERROR>("This functionality is not available");
-	//auto d_field = dpslab->computeFieldAtParticles();
-	// fieldAtParticles.resize(d_field.size());
-	// thrust::copy(d_field.begin(), d_field.end(), fieldAtParticles.begin());
       }
       writeSimulation(sim, fieldAtParticles);
       numberRetriesThisStep=0;
