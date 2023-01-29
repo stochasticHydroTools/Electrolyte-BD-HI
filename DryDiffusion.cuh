@@ -387,37 +387,40 @@ public:
     this->steps = 0;
     this->brownian_rule = par.brownianUpdateRule;
     sys->log<System::MESSAGE>("[BDWithThermalDrift] Initialized with seed %u", this->seed);
-    real dryRadius;
+    real dryRadius = 0;
     if(par.wetRadius <= 0){
       dryRadius = par.hydrodynamicRadius;
       this->isFullDry = true;
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full dry mode");
     }
+    else if(par.wetRadius <= par.hydrodynamicRadius){
+      par.wetRadius = par.hydrodynamicRadius;
+      dryRadius = 0;
+    }
     else{
-      if(par.wetRadius >= par.hydrodynamicRadius){
-	par.wetRadius = par.hydrodynamicRadius;
-	dryRadius = 0;
-      }
-      else{
-	dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
-      }
-      wetMobility = std::make_shared<WetMobility>(par, pd);
+      dryRadius = 1/( 1/par.hydrodynamicRadius - 1/par.wetRadius);
     }
     if(dryRadius > 0){
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Dry radius is: %g", dryRadius);
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Wet radius is: %g", par.wetRadius);
       if(par.dryMobilityFile.empty()){
+	sys->log<System::MESSAGE>("[BDWithThermalDrift] Computing self mobility data using DPStokes ");
 	auto mobilityData = computeMobilityDataForDryDiffusion(par, dryRadius);
 	dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, mobilityData, par.H);
       }
-      else
+      else{
+	sys->log<System::MESSAGE>("[BDWithThermalDrift] Reading self mobility from" +
+				  par.dryMobilityFile);
 	dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, par.dryMobilityFile, par.H);
+      }
     }
     else{
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full wet mode");
       this->isFullWet = true;
       dryMobility = std::make_shared<DryMobility>(); //A dummy instance
     }
+    if(not isFullDry)
+      wetMobility = std::make_shared<WetMobility>(par, pd);
   }
 
   void forwardTime() override;
