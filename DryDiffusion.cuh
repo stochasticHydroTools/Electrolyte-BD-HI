@@ -394,7 +394,7 @@ public:
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full dry mode");
     }
     else{
-      if(par.wetRadius > par.hydrodynamicRadius){
+      if(par.wetRadius >= par.hydrodynamicRadius){
 	par.wetRadius = par.hydrodynamicRadius;
 	dryRadius = 0;
       }
