@@ -72,6 +72,7 @@
 #include "misc/LanczosAlgorithm.cuh"
 #include "Integrator/BDHI/FCM/FCM_impl.cuh"
 #include"Integrator/BDHI/DoublyPeriodic/DPStokesSlab.cuh"
+#include "utils/execution_policy.cuh"
 #include<fstream>
 
 using namespace uammd;
@@ -506,7 +507,8 @@ void DryWetBD::updatePositions(){
   int numberParticles = pg->getNumberParticles();
   noisePrevious.resize(numberParticles);
   if(steps==1)
-    thrust::fill(noisePrevious.begin(), noisePrevious.end(), real3());
+    thrust::fill(uammd::cached_device_execution_policy.on(st),
+		 noisePrevious.begin(), noisePrevious.end(), real3());
   auto groupIterator = pg->getIndexIterator(access::location::gpu);
   auto pos = pd->getPos(access::location::gpu, access::mode::readwrite);
   auto force = pd->getForce(access::location::gpu, access::mode::read);
@@ -519,14 +521,15 @@ void DryWetBD::updatePositions(){
   int BLOCKSIZE = 128;
   uint Nthreads = BLOCKSIZE<numberParticles?BLOCKSIZE:numberParticles;
   uint Nblocks = numberParticles/Nthreads +  ((numberParticles%Nthreads!=0)?1:0);
+  real3* wetMF   = wetMobility?wetMobility->getDeterministicVelocities():nullptr;
+  real3* wetBdW  = wetMobility?wetMobility->getStochasticVelocities():nullptr;
+  real3* wetDivM = wetMobility?wetMobility->getThermalDrift():nullptr;
   foo<<<Nblocks, Nthreads, 0, st>>>(pos.raw(),
 				    groupIterator,
 				    originalIndex,
 				    force.raw(),
 				    *dryMobility,
-				    wetMobility->getDeterministicVelocities(),
-				    wetMobility->getStochasticVelocities(),
-				    wetMobility->getThermalDrift(),
+				    wetMF, wetBdW, wetDivM,
 				    thrust::raw_pointer_cast(noisePrevious.data()),
 				    this->isFullWet,
 				    dt,
