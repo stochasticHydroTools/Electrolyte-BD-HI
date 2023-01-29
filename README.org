@@ -81,7 +81,7 @@ CMake will try to autodetect the necessary paths in your system. You can compile
  It is possible that CMake complains about some missing dependency (maybe MKL, or Lapack/blas), in this case you have to install said dependency and then run cmake again.
  
 * Tests
-Some unit tests are available in tests.cu. They use [Gtest](https://github.com/google/googletest). CMake will autodownload it for you. Compile with CMake and then run ./tests
+Some unit tests are available in tests.cu. They use [[https://github.com/google/googletest][Gtest]]. CMake will autodownload it for you. Compile with CMake and then run ./tests
 
 * USAGE:
 This code expects to find a file called data.main in the folder where it is executed.
