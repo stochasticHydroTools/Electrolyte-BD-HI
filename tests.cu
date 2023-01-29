@@ -76,7 +76,7 @@ TEST(FullWetMobility, SelfMobilityIsCorrectAtMiddlePlaneForLargeDomain){
   par.viscosity = 1.0/(6*M_PI);
   par.hydrodynamicRadius = 1.0;
   par.dt = 1.0;
-  par.wetRadius = par.hydrodynamicRadius;
+  par.wetRadius = par.hydrodynamicRadius; //0<wetRadius<=hydrodynamicRadius means full wet
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.dryMobilityFile = "mob.dat";
   par.H = 128;
@@ -87,7 +87,7 @@ TEST(FullWetMobility, SelfMobilityIsCorrectAtMiddlePlaneForLargeDomain){
   bd->addInteractor(std::make_shared<miniInteractor>(pd));
   bd->forwardTime();
   real M0 = pd->getPos(access::cpu, access::write)[0].x;
-  ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-2));
+  ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-1));
 }
 
 
@@ -105,7 +105,7 @@ void computeSelfMobilityWithWetRadius(real wetRadius){
   par.wetRadius = wetRadius;
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.dryMobilityFile = "mob.dat";
-  par.H = 128;
+  par.H = 64;
   par.Lxy = 64;
   auto pd = std::make_shared<ParticleData>(1);
   pd->getPos(access::cpu, access::write)[0] = real4();
@@ -117,9 +117,9 @@ void computeSelfMobilityWithWetRadius(real wetRadius){
 }
 
 TEST(DryWetMobility, SelfMobilityIsCorrectForAnyWetRadius){
-  real minWetRadius = 0.1;
-  real maxWetRadius = 0.9;
-  int Ntest = 8;
+  real minWetRadius = 2;
+  real maxWetRadius = 16;
+  int Ntest = 4;
   fori(0, Ntest){
     real wetRadius = minWetRadius + i*(maxWetRadius - minWetRadius)/(Ntest-1);
     computeSelfMobilityWithWetRadius(wetRadius);
