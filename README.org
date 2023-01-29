@@ -79,7 +79,11 @@ CMake will try to autodetect the necessary paths in your system. You can compile
      $ make
    #+end_src
  It is possible that CMake complains about some missing dependency (maybe MKL, or Lapack/blas), in this case you have to install said dependency and then run cmake again.
- 
+ Note that the CMake configuration will compile in debug mode by default. This is much slower to both compile and run.
+ You can disable debugging by running cmake as:
+ #+begin_src bash
+   $cmake -DCMAKE_BUILD_TYPE=Release ..
+ #+end_src
 * Tests
 Some unit tests are available in tests.cu. They use [[https://github.com/google/googletest][Gtest]]. CMake will autodownload it for you. Compile with CMake and then run ./tests
 
@@ -124,7 +128,7 @@ flag #An option that does not need arguments
  *wetHydrodynamicRadius*: The wet hydrodynamic radius, i.e., the radius given to DPStokes.
    The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
    If the wet radius is negative, full dry is considered.
-   If the wet radius is equal or larger than the hydrodynamic radius, full wet is considered and wet radius is overriden to min(wetHydrodynamicRadius, hydrodynamicRadius)
+   If the wet radius is equal or smaller than the hydrodynamic radius (but positive), full wet is considered and wet radius is overriden to hydrodynamicRadius
  *dt*: Time step for the BD integrator
  
  *U0, sigma, r_m, p*: Parameters for the repulsive interaction. If U0=0 the steric repulsion is turned off.
