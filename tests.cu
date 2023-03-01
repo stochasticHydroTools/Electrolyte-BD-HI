@@ -56,7 +56,7 @@ TEST(FullDryMobility, SelfMobilityIsCorrect){
   par.dt = 1.0;
   par.wetRadius = -1;
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
-  par.dryMobilityFile = "mob.dat";
+  // par.dryMobilityFile = "mob.dat";
   par.H = 32;
   par.Lxy = 64;
   auto pd = std::make_shared<ParticleData>(1);
@@ -125,3 +125,21 @@ TEST(DryWetMobility, SelfMobilityIsCorrectForAnyWetRadius){
     computeSelfMobilityWithWetRadius(wetRadius);
   }
 }
+
+// // Tests added by Aref
+// int Factorial(int n) {
+//    if ((n==0)||(n==1))
+//    return 1;
+//    else
+//    return n*Factorial(n-1);
+// }
+
+// // Tests factorial of 0.
+// TEST(FactorialTest, HandlesZeroInput){
+//   EXPECT_EQ(Factorial(0), 1);
+// }
+
+// // Tests factorial of positive numbers.
+// TEST(FactorialTest, HandlesPositiveInput){
+//   EXPECT_EQ(Factorial(8), 40320);
+// }
