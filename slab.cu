@@ -1,4 +1,4 @@
-/*Raul P.  Pelaez 2020-2023. Dry and  wet diffusion in a  slit channel
+/*Raul P.  Pelaez 2020-2023. Dry and  wet diffusion in a slit channel
   with electrostatic interactions.
 
   About this code
@@ -71,8 +71,8 @@
 #include"DryDiffusion.cuh"
 #include"utils/InputFile.h"
 #include"Interactor/DoublyPeriodic/DPPoissonSlab.cuh"
-#include <fstream>
-#include <limits>
+#include<fstream>
+#include<limits>
 #include<random>
 using namespace uammd;
 using std::make_shared;
@@ -99,6 +99,25 @@ public:
     return std::make_tuple(pos.raw());
   }
 };
+
+class ExternalField{
+  real3 externalField;
+public:
+  ExternalField(real3 externalField):externalField(externalField){}
+
+  __device__ ForceEnergyVirial sum(Interactor::Computables comp, real charges){
+    real3 externalForce = charges*externalField;
+    ForceEnergyVirial result;
+    result.force = externalForce;
+    return result;
+  }
+
+  auto getArrays(ParticleData *pd){
+    auto charges = pd->getCharge(access::gpu, access::read); // a number
+    return charges.begin();
+  }
+};
+
 
 struct Parameters{
   int numberParticles;
@@ -132,6 +151,9 @@ struct Parameters{
   real beta = 10.13641758;
   int nxy_stokes;
   int nz_stokes;
+
+  real3 externalField;
+  int fold;
 };
 
 struct UAMMD{
@@ -261,6 +283,10 @@ auto createWallRepulsionInteractor(UAMMD sim){
   return make_shared<ExternalForces<RepulsiveWall>>(sim.pd, make_shared<RepulsiveWall>(sim.par.H, potpar, sim.par.imageDistanceMultiplier));
 }
 
+auto createExternalFieldInteractor(UAMMD sim){
+  return make_shared<ExternalForces<ExternalField>>(sim.pd, make_shared<ExternalField>(sim.par.externalField));
+}
+
 auto createPotential(UAMMD sim){
   auto pot = std::make_shared<RepulsivePotential>();
   RepulsivePotential::InputPairParameters ppar;
@@ -300,8 +326,13 @@ void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
   if(outf.good())outf<<"#"<<std::endl;
   if(outfield.good())outfield<<"#"<<std::endl;
   fori(0, sim.par.numberParticles){
-    //real3 p = box.apply_pbc(make_real3(pos[i]));
-    real3 p = make_real3(pos[i]);
+    real3 p;
+    if(sim.par.fold == 1){
+      p = box.apply_pbc(make_real3(pos[i]));
+    } else {
+      p = make_real3(pos[i]);
+    }
+    // real3 p = make_real3(pos[i]);
     real q = charge[i];
     out<<std::setprecision(2*sizeof(real))<<p<<" "<<q<<"\n";
     if(outf.good()){
@@ -358,6 +389,9 @@ int main(int argc, char *argv[]){
     }
   }
   bd->addInteractor(createWallRepulsionInteractor(sim));
+  if(sim.par.externalField.x != 0 or sim.par.externalField.y != 0 or sim.par.externalField.z != 0){
+    bd->addInteractor(createExternalFieldInteractor(sim));
+  }
   int numberRetries=0;
   int numberRetriesThisStep=0;
   int lastStepSaved=0;
@@ -413,7 +447,10 @@ int main(int argc, char *argv[]){
     if(sim.par.printSteps > 0 and j%sim.par.printSteps==0){
       std::vector<real4> fieldAtParticles;
       if(not sim.par.fieldfile.empty() and dpslab){
-	System::log<System::ERROR>("This functionality is not available");
+	// System::log<System::ERROR>("This functionality is not available");
+	auto d_field = dpslab->computeFieldAtParticles();
+	fieldAtParticles.resize(d_field.size());
+	thrust::copy(d_field.begin(), d_field.end(), fieldAtParticles.begin());
       }
       writeSimulation(sim, fieldAtParticles);
       numberRetriesThisStep=0;
@@ -430,6 +467,7 @@ int main(int argc, char *argv[]){
 Parameters readParameters(std::string datamain){
   InputFile in(datamain);
   Parameters par;
+  in.getOption("fold", InputFile::Required)>>par.fold;
   in.getOption("Lxy", InputFile::Required)>>par.Lxy;
   in.getOption("H", InputFile::Required)>>par.H;
   in.getOption("numberSteps", InputFile::Required)>>par.numberSteps;
@@ -455,6 +493,7 @@ Parameters readParameters(std::string datamain){
   in.getOption("permitivity", InputFile::Required)>>par.permitivity;
   in.getOption("permitivityTop", InputFile::Required)>>par.permitivityTop;
   in.getOption("permitivityBottom", InputFile::Required)>>par.permitivityBottom;
+  in.getOption("externalField", InputFile::Required)>>par.externalField;
 
   in.getOption("Nxy", InputFile::Required)>>par.Nxy;
 
