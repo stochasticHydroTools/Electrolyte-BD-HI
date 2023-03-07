@@ -424,6 +424,14 @@ int main(int argc, char *argv[]){
   tim.tic();
   lastStepSaved=0;
   forj(0, sim.par.numberSteps){
+    if(sim.par.printSteps > 0 and j%sim.par.printSteps==0){
+      std::vector<real4> fieldAtParticles;
+      if(not sim.par.fieldfile.empty() and dpslab){
+	// System::log<System::ERROR>("This functionality is not available");
+	auto d_field = dpslab->computeFieldAtParticles();
+	fieldAtParticles.resize(d_field.size());
+	thrust::copy(d_field.begin(), d_field.end(), fieldAtParticles.begin());
+      }
     bd->forwardTime();
     if(checkWallOverlap(sim)){
       numberRetries++;
@@ -443,19 +451,10 @@ int main(int argc, char *argv[]){
       lastStepSaved=j;
       saveConfiguration(sim);
     }
-
-    if(sim.par.printSteps > 0 and j%sim.par.printSteps==0){
-      std::vector<real4> fieldAtParticles;
-      if(not sim.par.fieldfile.empty() and dpslab){
-	// System::log<System::ERROR>("This functionality is not available");
-	auto d_field = dpslab->computeFieldAtParticles();
-	fieldAtParticles.resize(d_field.size());
-	thrust::copy(d_field.begin(), d_field.end(), fieldAtParticles.begin());
-      }
-      writeSimulation(sim, fieldAtParticles);
-      numberRetriesThisStep=0;
-      lastStepSaved=j;
-      saveConfiguration(sim);
+    writeSimulation(sim, fieldAtParticles);
+    numberRetriesThisStep=0;
+    lastStepSaved=j;
+    saveConfiguration(sim);
     }
   }
   System::log<System::MESSAGE>("Number of rejected configurations: %d (%g%% of total)", numberRetries, (double)numberRetries/(sim.par.numberSteps + sim.par.relaxSteps)*100.0);
