@@ -77,6 +77,14 @@
 
 using namespace uammd;
 
+//Writes a mobility file with constant mobility accross the domain
+void writeDefaultMobilityFile(){
+  std::ofstream out("uniformMob.dat");
+  out<<"-1.0 1.0 1.0 1.0"<<std::endl;
+  out<<"0.0 1.0 1.0 1.0"<<std::endl;
+  out<<"1.0 1.0 1.0 1.0"<<std::endl;
+}
+
 namespace dry_detail{
 
   //This function receives  as input a vector  containing an arbitrary
@@ -340,7 +348,7 @@ auto computeMobilityDataForDryDiffusion(WetDryParameters par,
 					real hydrodynamicRadius){
   auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, hydrodynamicRadius);
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
-  constexpr int nsamples = 1000;
+  constexpr int nsamples = 10;
   std::vector<real4> mobilityData(nsamples);
   for(int i = 0; i<nsamples; i++){
     real z = -par.H*0.5 + par.H*(i/real(nsamples-1));
@@ -356,6 +364,11 @@ auto computeMobilityDataForDryDiffusion(WetDryParameters par,
     disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,0,1,0}), 1, 0);
     mobilityData[i].w = 6*M_PI*par.viscosity*hydrodynamicRadius*real3(disp[0]).z;
   }
+
+  // for(int i = 0; i < nsamples; i++){
+  //   std::cout << mobilityData[i] << std::endl;
+  // }
+  
   return mobilityData;
 }
 
@@ -392,6 +405,10 @@ public:
       dryRadius = par.hydrodynamicRadius;
       this->isFullDry = true;
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full dry mode");
+      if(par.dryMobilityFile.empty()){
+	writeDefaultMobilityFile();
+	par.dryMobilityFile = "uniformMob.dat";
+      }
     }
     else if(par.wetRadius <= par.hydrodynamicRadius){
       par.wetRadius = par.hydrodynamicRadius;
@@ -404,6 +421,7 @@ public:
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Dry radius is: %g", dryRadius);
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Wet radius is: %g", par.wetRadius);
       if(par.dryMobilityFile.empty()){
+	// std::cout << "dryMobilityFile empty!" << std::endl;
 	sys->log<System::MESSAGE>("[BDWithThermalDrift] Computing self mobility data using DPStokes ");
 	auto mobilityData = computeMobilityDataForDryDiffusion(par, dryRadius);
 	dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, mobilityData, par.H);
