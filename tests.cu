@@ -9,6 +9,50 @@
 #include"Interactor/DoublyPeriodic/DPPoissonSlab.cuh"
 using namespace uammd;
 
+struct Parameters{
+  int numberParticles;
+  real Lxy, H;
+  int Nxy = -1;
+  int support = 10;
+  real numberStandardDeviations = 4;
+  real upsampling = 1.2;
+  real tolerance = 1e-4;
+  real temperature;
+  real permitivity, permitivityBottom, permitivityTop;
+
+  real bottomWallSurfaceValue = 0;
+
+  int numberSteps, printSteps, relaxSteps;
+  real dt, viscosity, hydrodynamicRadius, wetHydrodynamicRadius;
+
+  real gw;
+  real U0, sigma, r_m, p, cutOff;
+  real wall_U0, wall_sigma, wall_r_m, wall_p, wall_cutOff;
+  real imageDistanceMultiplier;
+
+  std::string outfile, readFile, forcefile, fieldfile;
+  std::string mobilityFile;
+
+
+  std::string brownianUpdateRule = "EulerMaruyama";
+  bool idealParticles=false;
+  bool noElectrostatics=false;
+  int w = 6;
+  real beta = 10.13641758;
+  int nxy_stokes;
+  int nz_stokes;
+
+  real3 externalField;
+  int fold;
+};
+
+
+struct UAMMD{
+  std::shared_ptr<ParticleData> pd;
+  std::shared_ptr<thrust::device_vector<real4>> savedPositions;
+  Parameters par;
+};
+
 //Adds a force to the first particle, the force defaults to 1,0,0 if not provided
 struct miniInteractor: public Interactor{
   real3 f;
@@ -23,6 +67,29 @@ public:
 };
 
 // ############## Tests by Aref ############## //
+
+// // Add a force to a particle and recompute it using the Intercator
+// TEST(Playing, ReadWriteParticleForce){
+//   auto pd = std::make_shared<ParticleData>(2);
+//   auto external = std::make_shared<miniInteractor>(pd);
+//   external->sum({.force=true});
+//   real3 F0 = make_real3(pd->getForce(access::location::cpu, access::mode::read)[0]);
+//   std::cout << "force on particle #1 = " << F0 << std::endl;
+//   EXPECT_THAT(F0.x, ::testing::DoubleNear(1, 1e-5));
+// }
+
+// // Reading and writing particle positions
+// TEST(Playing, ReadWriteParticlePosition){
+//   auto pd = std::make_shared<ParticleData>(2);
+//   pd->getPos(access::location::cpu, access::mode::write)[0] = {1,0,0};
+//   pd->getPos(access::location::cpu, access::mode::write)[1] = {1.5,0,0};
+//   real x0 = pd->getPos(access::location::cpu, access::mode::read)[0].x;
+//   real x1 = pd->getPos(access::location::cpu, access::mode::read)[1].x;
+//   std::cout << "particle #1 position = " << x0 << std::endl;
+//   std::cout << "particle #2 position = " << x1 << std::endl;
+//   EXPECT_THAT(x0, ::testing::DoubleNear(1, 1e-5));
+//   EXPECT_THAT(x1, ::testing::DoubleNear(1.5, 1e-5));
+// }
 
 // // Compute electrostatic fields for 2 particles
 // TEST(FULLDRY, ComputeElectrostaticField){
@@ -61,51 +128,88 @@ public:
 //   EXPECT_THAT(E0x, ::testing::DoubleNear(magicalValue, 1e-5));
 // }
 
-// Test if a simple integration is working properly
-TEST(FULLDRY, SimpleIntegration){
+// // Test if a simple integration is working properly
+// TEST(FULLDRY, SimpleIntegration){
+//   using BD = DryWetBD;
+//   BD::Parameters par;
+//   par.temperature = 0;
+//   // \mu = 1/(6\pi\eta a) = 1
+//   par.viscosity = 1.0/(6*M_PI);
+//   par.hydrodynamicRadius = 1.0;
+//   par.dt = 1.0;
+//   par.wetRadius = -1;
+//   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+//   par.H = 32;
+//   par.Lxy = 64;
+//   auto pd = std::make_shared<ParticleData>(1);
+//   pd->getPos(access::cpu, access::write)[0] = {0,0,0};
+//   auto bd = std::make_shared<BD>(pd, par);
+//   bd->addInteractor(std::make_shared<miniInteractor>(pd));
+//   bd->forwardTime();
+//   // F = [1, 0, 0]; \mu = 1; U = 1; \Delta t = 1. \Rightarrow \Delta x = 1
+//   real dx = pd->getPos(access::cpu, access::write)[0].x;
+//   EXPECT_THAT(dx, ::testing::DoubleNear(1, 1e-5));
+// }
+
+// Test if an integration works for a pair of particles interacting electrostatically
+TEST(FULLDRY, Integration){
+  UAMMD sim;
+  
+  sim.par.numberParticles = 2;
+  sim.pd = std::make_shared<ParticleData>(sim.par.numberParticles);
+  
+  sim.pd->getPos(access::location::cpu, access::mode::write)[0] = {6.001,4.02,0.05};
+  sim.pd->getPos(access::location::cpu, access::mode::write)[1] = {5.11,5.24,-2.1};
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[0] = 1;
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[1] = -1;
+
+  sim.par.Lxy = 32;
+  sim.par.H = 20;
+  sim.par.gw = 0.25;
+  sim.par.permitivity = 1;
+  sim.par.permitivityTop = 1;
+  sim.par.permitivityBottom = 0.05;
+  sim.par.Nxy = 72;
+  sim.par.temperature = 0;
+  sim.par.viscosity = 1.0/(6*M_PI);
+  sim.par.hydrodynamicRadius = 1.0;
+  sim.par.wetHydrodynamicRadius = -1;
+  sim.par.dt = 0.01;
+  sim.par.brownianUpdateRule = "EulerMaruyama";
+
+  using DPP = DPPoissonSlab;
+  DPP::Parameters par;
+  par.Lxy = make_real2(sim.par.Lxy);
+  par.H = sim.par.H;
+  par.gw = sim.par.gw;
+  DPP::Permitivity perm;
+  perm.inside = sim.par.permitivity;
+  perm.top = sim.par.permitivityTop;
+  perm.bottom = sim.par.permitivityBottom;
+  par.permitivity = perm;
+  par.Nxy = sim.par.Nxy;
+  auto poisson = std::make_shared<DPPoissonSlab>(sim.pd, par);
+  
   using BD = DryWetBD;
-  BD::Parameters par;
-  par.temperature = 0;
-  // \mu = 1/(6\pi\eta a) = 1
-  par.viscosity = 1.0/(6*M_PI);
-  par.hydrodynamicRadius = 1.0;
-  par.dt = 1.0;
-  par.wetRadius = -1;
-  par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
-  par.H = 32;
-  par.Lxy = 64;
-  auto pd = std::make_shared<ParticleData>(1);
-  pd->getPos(access::cpu, access::write)[0] = {0,0,0};
-  auto bd = std::make_shared<BD>(pd, par);
-  bd->addInteractor(std::make_shared<miniInteractor>(pd));
+  BD::Parameters parBD;
+  parBD.temperature = sim.par.temperature;
+  parBD.viscosity = sim.par.viscosity;
+  parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
+  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.dt = sim.par.dt;
+  parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  parBD.Lxy = sim.par.Lxy;
+  parBD.H = sim.par.H;
+  auto bd = std::make_shared<BD>(sim.pd, parBD);
+  bd->addInteractor(poisson);
   bd->forwardTime();
-  // F = [1, 0, 0]; \mu = 1; U = 1; \Delta t = 1. \Rightarrow \Delta x = 1
-  real dx = pd->getPos(access::cpu, access::write)[0].x;
-  ASSERT_THAT(dx, ::testing::DoubleNear(1, 1e-5));
+
+  real dx = sim.pd->getPos(access::cpu, access::write)[0].x-6.001;
+  std::cout << "displacement is " << dx << std::endl;
+  real magicalValue = -0.0000390221100821;//given by the MATLB code
+  EXPECT_THAT(dx, ::testing::DoubleNear(magicalValue, 1e-5));
 }
 
-// // Add a force to a particle and recompute it using the Intercator
-// TEST(Playing, ReadWriteParticleForce){
-//   auto pd = std::make_shared<ParticleData>(2);
-//   auto external = std::make_shared<miniInteractor>(pd);
-//   external->sum({.force=true});
-//   real3 F0 = make_real3(pd->getForce(access::location::cpu, access::mode::read)[0]);
-//   std::cout << "force on particle #1 = " << F0 << std::endl;
-//   EXPECT_THAT(F0.x, ::testing::DoubleNear(1, 1e-5));
-// }
-
-// // Reading and writing particle positions
-// TEST(Playing, ReadWriteParticlePosition){
-//   auto pd = std::make_shared<ParticleData>(2);
-//   pd->getPos(access::location::cpu, access::mode::write)[0] = {1,0,0};
-//   pd->getPos(access::location::cpu, access::mode::write)[1] = {1.5,0,0};
-//   real x0 = pd->getPos(access::location::cpu, access::mode::read)[0].x;
-//   real x1 = pd->getPos(access::location::cpu, access::mode::read)[1].x;
-//   std::cout << "particle #1 position = " << x0 << std::endl;
-//   std::cout << "particle #2 position = " << x1 << std::endl;
-//   EXPECT_THAT(x0, ::testing::DoubleNear(1, 1e-5));
-//   EXPECT_THAT(x1, ::testing::DoubleNear(1.5, 1e-5));
-// }
 
 // // ############## Tests by Raul ############## //
 // TEST(DryWetMobility, CanBeCreated){
