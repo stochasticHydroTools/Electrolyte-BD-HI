@@ -1,4 +1,4 @@
-/*Raul P. Pelaez 2022.  This  file provides an UAMMD Integrator called
+/*Raul P. Pelaez and Aref Hashemi 2023. This  file provides an UAMMD Integrator called
   DryWetBD.  The Integrator separates the dynamics into two parts, one
   is dry (i.e  neglecting hydrodynamic interactions) and  the wet part
   has  an  increased  hydrodynamic radius  but  includes  hydrodynamic
@@ -76,14 +76,6 @@
 #include<fstream>
 
 using namespace uammd;
-
-//Writes a mobility file with constant mobility accross the domain
-void writeDefaultMobilityFile(){
-  std::ofstream out("uniformMob.dat");
-  out<<"-1.0 1.0 1.0 1.0"<<std::endl;
-  out<<"0.0 1.0 1.0 1.0"<<std::endl;
-  out<<"1.0 1.0 1.0 1.0"<<std::endl;
-}
 
 namespace dry_detail{
 
@@ -188,7 +180,7 @@ public:
   //+-1).
   DryMobilityWithThermalDrift(real viscosity, real dryHydrodynamicRadius, std::vector<real4> data, real Lz):Lz(Lz){
     System::log<System::MESSAGE>("[SelfMobility] Initialized, Lz=%g", Lz);
-    dry_detail::initializeTable(data, Lz);
+    this->mobilityAndDerivative = dry_detail::initializeTable(data, Lz);
     this->m0 = 1.0/(6*M_PI*viscosity*dryHydrodynamicRadius);
   }
 
@@ -348,19 +340,20 @@ auto computeMobilityDataForDryDiffusion(WetDryParameters par,
 					real hydrodynamicRadius){
   auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, hydrodynamicRadius);
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
-  constexpr int nsamples = 10;
+  constexpr int nsamples = 193;
   std::vector<real4> mobilityData(nsamples);
   for(int i = 0; i<nsamples; i++){
     real z = -par.H*0.5 + par.H*(i/real(nsamples-1));
-    mobilityData[i].x = z;
+    mobilityData[i].x = z/(0.5*par.H);
     auto pos = thrust::make_constant_iterator<real4>({0,0,z,0});
+
     //Mxx
     auto disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({1,0,0,0}), 1, 0);
-    //Myy
     mobilityData[i].y = 6*M_PI*par.viscosity*hydrodynamicRadius*real3(disp[0]).x;
-    disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,1,0,0}), 1, 0);
     //Mzz
+    disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,1,0,0}), 1, 0);
     mobilityData[i].z = 6*M_PI*par.viscosity*hydrodynamicRadius*real3(disp[0]).y;
+    //Mzz
     disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,0,1,0}), 1, 0);
     mobilityData[i].w = 6*M_PI*par.viscosity*hydrodynamicRadius*real3(disp[0]).z;
   }
@@ -371,6 +364,30 @@ auto computeMobilityDataForDryDiffusion(WetDryParameters par,
   
   return mobilityData;
 }
+
+//Computes self mobility at a given location
+real4 computeSelfMobility(WetDryParameters par, real z){
+  auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, par.hydrodynamicRadius);
+  auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+  real4 mobilityData;
+
+  mobilityData.x = z;
+  z += -par.H*0.5;
+  auto pos = thrust::make_constant_iterator<real4>({0,0,z,0});
+
+  //Mxx
+  auto disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({1,0,0,0}), 1, 0);
+  mobilityData.y = 6*M_PI*par.viscosity*par.hydrodynamicRadius*real3(disp[0]).x;
+  //Mzz
+  disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,1,0,0}), 1, 0);
+  mobilityData.z = 6*M_PI*par.viscosity*par.hydrodynamicRadius*real3(disp[0]).y;
+  //Mzz
+  disp = dpstokes->Mdot(pos, thrust::make_constant_iterator<real4>({0,0,1,0}), 1, 0);
+  mobilityData.w = 6*M_PI*par.viscosity*par.hydrodynamicRadius*real3(disp[0]).z;
+  
+  return mobilityData;
+}
+
 
 
 //This class  provides an Integrator for  the BDHI equation in  a slit
@@ -405,10 +422,6 @@ public:
       dryRadius = par.hydrodynamicRadius;
       this->isFullDry = true;
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full dry mode");
-      if(par.dryMobilityFile.empty()){
-	writeDefaultMobilityFile();
-	par.dryMobilityFile = "uniformMob.dat";
-      }
     }
     else if(par.wetRadius <= par.hydrodynamicRadius){
       par.wetRadius = par.hydrodynamicRadius;
