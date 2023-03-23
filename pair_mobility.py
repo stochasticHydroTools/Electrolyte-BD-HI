@@ -3,7 +3,7 @@ from mobility_matrix import *
 import scipy.io
 
 device = 'cpu'
-domType = 'DPBW'
+domType = 'DPSC'
 
 eta = 1/6/np.sqrt(np.pi)
 radP = 1.0

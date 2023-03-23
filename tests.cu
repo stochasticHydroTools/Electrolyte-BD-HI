@@ -12,15 +12,23 @@ using namespace uammd;
 using scalar = double;
 
 // A normalized measure for accuracy
-scalar tolerance(scalar correctVal, scalar mult){
-  scalar measure;
-  if (abs(correctVal) > 1e-15){
-    measure = mult*abs(correctVal);
+bool tolerance(scalar val, scalar expectedval, scalar numdigits = 2.0){
+  std::cout << val << " " << expectedval << std::endl;
+  if (abs(expectedval) > 1e-15){
+    scalar numCorrectDigits = log10(abs(expectedval/(val-expectedval)));
+    if (numCorrectDigits > numdigits){
+      return true;
+    } else {
+      return false;
+    }
   } else {
-    measure = 1e-15;
+    if (-log10(abs(val-expectedval))>14){
+      return true;
+    } else {
+      return false;
+    }
   }
 
-  return measure;
 }
 
 //Writes a mobility file with constant mobility accross the domain
@@ -113,7 +121,8 @@ TEST(Playing, ReadWriteParticlePosition){
   EXPECT_THAT(x1, ::testing::DoubleNear(1.5, 1e-5));
 }
 
-// full dry mode: Compute electrostatic fields for 2 particles
+// Full Dry Mode: Compute electrostatic fields for 2 particles
+// The computed electric fields at particles will be compared to that obtained from the MATLAB code.
 TEST(FULLDRY, ComputeElectrostaticField){
   using DPP = DPPoissonSlab;
   DPP::Parameters par;
@@ -123,7 +132,7 @@ TEST(FULLDRY, ComputeElectrostaticField){
   par.gw = 0.25;
   DPP::Permitivity perm;
   perm.inside = 1.0;
-  perm.top = 1.0;
+  perm.top = 0.05;
   perm.bottom = 0.05;
   par.permitivity = perm;
   par.Nxy = 72;
@@ -150,15 +159,16 @@ TEST(FULLDRY, ComputeElectrostaticField){
   std::cout << "x field at particle #1 (electrostatics) = " << E0x << std::endl;
   std::cout << "y field at particle #1 (electrostatics) = " << E0y << std::endl;
   std::cout << "z field at particle #1 (electrostatics) = " << E0z << std::endl;
-  real magicalValuex = 0.005223629199127;//given by the MATLB code
-  real magicalValuey = 0                ;
-  real magicalValuez = 0.000166699457402;
-  EXPECT_THAT(E0x, ::testing::DoubleNear(magicalValuex, tolerance(magicalValuex,1e-5)));
-  EXPECT_THAT(E0y, ::testing::DoubleNear(magicalValuey, tolerance(magicalValuey,1e-5)));
-  EXPECT_THAT(E0z, ::testing::DoubleNear(magicalValuez, tolerance(magicalValuez,1e-5)));
+  real expectedE0x = 0.005240820721856;//given by the MATLB code
+  real expectedE0y = 0                ;
+  real expectedE0z = 0.000164511031114;
+  EXPECT_THAT(tolerance(E0x, expectedE0x, 4), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(E0y, expectedE0y, 4), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(E0z, expectedE0z, 4), ::testing::IsTrue);
 }
 
-// full dry mode: Test if a simple integration is working properly
+// Full Dry Mode: Test if a simple integration is working properly
+// An external force [1 0 0] is applied on a particle and we compute its displacement when mobility is 1.
 TEST(FULLDRY, SimpleIntegration){
   using BD = DryWetBD;
   BD::Parameters par;
@@ -183,8 +193,8 @@ TEST(FULLDRY, SimpleIntegration){
   EXPECT_THAT(dx, ::testing::DoubleNear(1, 1e-5));
 }
 
-// full dry mode: Test if an integration works for a pair of particles interacting electrostatically
-// self mobility given by Einstein equation
+// Full Dry Mode: Test if an integration works for a pair of particles interacting electrostatically
+// Here we assume that the self mobility is given by the Einstein equation.
 TEST(FULLDRY, IntegrationFlatMobility){
   UAMMD sim;
   
@@ -206,7 +216,7 @@ TEST(FULLDRY, IntegrationFlatMobility){
   sim.par.H = 19.2;
   sim.par.gw = 0.25;
   sim.par.permitivity = 1;
-  sim.par.permitivityTop = 1;
+  sim.par.permitivityTop = 0.05;
   sim.par.permitivityBottom = 0.05;
   sim.par.Nxy = 72;
   sim.par.temperature = 0;
@@ -258,16 +268,16 @@ TEST(FULLDRY, IntegrationFlatMobility){
   std::cout << "x displacement is " << dx << std::endl;
   std::cout << "y displacement is " << dy << std::endl;
   std::cout << "z displacement is " << dz << std::endl;
-  scalar magicalValuedx = F0x*1*sim.par.dt;//0.0000522362919913 given by the MATLB code  
-  scalar magicalValuedy = F0y*1*sim.par.dt;//0
-  scalar magicalValuedz = F0z*1*sim.par.dt;//0.0000016669945740;
-  EXPECT_THAT(dx, ::testing::DoubleNear(magicalValuedx, tolerance(magicalValuedx,1e-5)));
-  EXPECT_THAT(dy, ::testing::DoubleNear(magicalValuedy, tolerance(magicalValuedy,1e-5)));
-  EXPECT_THAT(dz, ::testing::DoubleNear(magicalValuedz, tolerance(magicalValuedz,1e-5)));
+  scalar expecteddx = F0x*1*sim.par.dt;//0.0000524082072186 given by the MATLB code  
+  scalar expecteddy = F0y*1*sim.par.dt;//0
+  scalar expecteddz = F0z*1*sim.par.dt;//0.0000016451103111;
+  EXPECT_THAT(tolerance(dx, expecteddx, 4), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dy, expecteddy, 4), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dz, expecteddz, 4), ::testing::IsTrue);
 }
 
 
-// test is the self mobility is computed correctly
+// Test if the self mobility is computed correctly
 TEST(FULLDRY, selfMobility){
   auto pd = std::make_shared<ParticleData>(1);//dummy instance
   using BD = DryWetBD;
@@ -286,20 +296,20 @@ TEST(FULLDRY, selfMobility){
   std::cout << muxx << std::endl;
   std::cout << muyy << std::endl;
   std::cout << muzz << std::endl;
-  scalar magicalValuemuxx = 0.862495177070900;// computed by the DPStokes python code at z = 4R_h above the bottom wall
-  scalar magicalValuemuyy = 0.862458866786545;
-  scalar magicalValuemuzz = 0.725839526229897;
-  std::cout << "expected xx mobility is " << magicalValuemuxx << std::endl;
-  std::cout << "expected yy mobility is " << magicalValuemuyy << std::endl;
-  std::cout << "expected zz mobility is " << magicalValuemuzz << std::endl;
-  EXPECT_THAT(muxx, ::testing::DoubleNear(magicalValuemuxx, tolerance(magicalValuemuxx,1e-2)));
-  EXPECT_THAT(muyy, ::testing::DoubleNear(magicalValuemuyy, tolerance(magicalValuemuyy,1e-2)));
-  EXPECT_THAT(muzz, ::testing::DoubleNear(magicalValuemuzz, tolerance(magicalValuemuzz,1e-2)));
+  scalar expectedmuxx = 0.849327755959755;// computed by the DPStokes python code at z = 4R_h above the bottom wall
+  scalar expectedmuyy = 0.849291424072988;
+  scalar expectedmuzz = 0.724165665045591;
+  std::cout << "expected xx mobility is " << expectedmuxx << std::endl;
+  std::cout << "expected yy mobility is " << expectedmuyy << std::endl;
+  std::cout << "expected zz mobility is " << expectedmuzz << std::endl;
+  EXPECT_THAT(tolerance(muxx, expectedmuxx), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(muyy, expectedmuyy), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(muzz, expectedmuzz), ::testing::IsTrue);
 }
 
 
-// full dry mode: Test if an integration works for a pair of particles interacting electrostatically
-// self mobility precomputed by the Stokes solver
+// Full Dry Mode: Test if an integration works for a pair of particles interacting electrostatically
+// Here self mobility is precomputed by the Stokes solver.
 TEST(FULLDRY, Integration){
   UAMMD sim;
   
@@ -322,7 +332,7 @@ TEST(FULLDRY, Integration){
 
   sim.par.gw = 0.25;
   sim.par.permitivity = 1;
-  sim.par.permitivityTop = 1;
+  sim.par.permitivityTop = 0.05;
   sim.par.permitivityBottom = 0.05;
   sim.par.Nxy = 72;
   sim.par.temperature = 0;
@@ -375,22 +385,22 @@ TEST(FULLDRY, Integration){
   std::cout << "x displacement is " << dx << std::endl;
   std::cout << "y displacement is " << dy << std::endl;
   std::cout << "z displacement is " << dz << std::endl;
-  scalar mu_xx = 0.862495177070900;//Computed by DPStokes solver
-  scalar mu_yy = 0.862458866786545;
-  scalar mu_zz = 0.725839526229897;
-  scalar magicalValuedx = mu_xx*F0x*sim.par.dt;
-  scalar magicalValuedy = mu_yy*F0y*sim.par.dt;
-  scalar magicalValuedz = mu_zz*F0z*sim.par.dt;
-  std::cout << "expected x displacement is " << magicalValuedx << std::endl;
-  std::cout << "expected y displacement is " << magicalValuedy << std::endl;
-  std::cout << "expected z displacement is " << magicalValuedz << std::endl;
-  EXPECT_THAT(dx, ::testing::DoubleNear(magicalValuedx, tolerance(magicalValuedx,1e-2)));
-  EXPECT_THAT(dy, ::testing::DoubleNear(magicalValuedy, tolerance(magicalValuedy,1e-2)));
-  EXPECT_THAT(dz, ::testing::DoubleNear(magicalValuedz, tolerance(magicalValuedz,1e-2)));
+  scalar mu_xx = 0.849327755959755;// computed by the DPStokes python code at z = 4R_h above the bottom wall
+  scalar mu_yy = 0.849291424072988;
+  scalar mu_zz = 0.724165665045591;
+  scalar expecteddx = mu_xx*F0x*sim.par.dt;
+  scalar expecteddy = mu_yy*F0y*sim.par.dt;
+  scalar expecteddz = mu_zz*F0z*sim.par.dt;
+  std::cout << "expected x displacement is " << expecteddx << std::endl;
+  std::cout << "expected y displacement is " << expecteddy << std::endl;
+  std::cout << "expected z displacement is " << expecteddz << std::endl;
+  EXPECT_THAT(tolerance(dx, expecteddx), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dy, expecteddy), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dz, expecteddz), ::testing::IsTrue);
 }
 
 
-// full wet mode: Test if an integration works for a pair of particles interacting electrostatically
+// Full Wet Mode: Test if an integration works for a pair of particles interacting electrostatically
 TEST(FULLWET, Integration){
   UAMMD sim;
   
@@ -415,7 +425,7 @@ TEST(FULLWET, Integration){
    
   sim.par.gw = 0.25;
   sim.par.permitivity = 1;
-  sim.par.permitivityTop = 1;
+  sim.par.permitivityTop = 0.05;
   sim.par.permitivityBottom = 0.05;
   sim.par.Nxy = 135;
   sim.par.temperature = 0;
@@ -476,123 +486,122 @@ TEST(FULLWET, Integration){
   std::cout << "z displacement is " << dz << std::endl;
   
   //given by the DPStokes solver code (pair_mobility.py)
-  scalar nu_xx = 0.156615987796052 ;
-  scalar nu_xy = 0                 ;
-  scalar nu_xz = -0.036746481747739;
-  scalar nu_yx = 0                 ;
-  scalar nu_yy = 0.066428530938183 ;
-  scalar nu_yz = 0                 ;
-  scalar nu_zx = -0.085289117508094;
-  scalar nu_zy = 0                 ;
-  scalar nu_zz = 0.041363902842424 ;
-  scalar mu_xx = 0.924166257588772 ;
-  scalar mu_yy = 0.924130139892737 ;
-  scalar mu_zz = 0.840468139888785 ;
-  scalar magicalValuedx = (nu_xx*F0x+nu_xy*F0y+nu_xz*F0z+mu_xx*F1x)*sim.par.dt;
-  scalar magicalValuedy = (nu_yx*F0x+nu_yy*F0y+nu_yz*F0z+mu_yy*F1y)*sim.par.dt;
-  scalar magicalValuedz = (nu_zx*F0x+nu_zy*F0y+nu_zz*F0z+mu_zz*F1z)*sim.par.dt;
-  std::cout << "expected x displacement is " << magicalValuedx << std::endl;
-  std::cout << "expected y displacement is " << magicalValuedy << std::endl;
-  std::cout << "expected z displacement is " << magicalValuedz << std::endl;
-  
-  EXPECT_THAT(dx, ::testing::DoubleNear(magicalValuedx, tolerance(magicalValuedx,1e-2)));
-  EXPECT_THAT(dy, ::testing::DoubleNear(magicalValuedy, tolerance(magicalValuedy,1e-2)));
-  EXPECT_THAT(dz, ::testing::DoubleNear(magicalValuedz, tolerance(magicalValuedz,1e-2)));
+  scalar nu_xx = 0.138291767457352;
+  scalar nu_xy = 0;
+  scalar nu_xz = -0.038706105653531;
+  scalar nu_yx = 0;
+  scalar nu_yy = 0.047304644896516;
+  scalar nu_yz = 0;
+  scalar nu_zx = -0.081720265183282;
+  scalar nu_zy = 0;
+  scalar nu_zz = 0.037554341201021;
+  scalar mu_xx = 0.893993039433745;
+  scalar mu_yy = 0.893956879655325;
+  scalar mu_zz = 0.829029667444467;
+  scalar expecteddx = (nu_xx*F0x+nu_xy*F0y+nu_xz*F0z+mu_xx*F1x)*sim.par.dt;
+  scalar expecteddy = (nu_yx*F0x+nu_yy*F0y+nu_yz*F0z+mu_yy*F1y)*sim.par.dt;
+  scalar expecteddz = (nu_zx*F0x+nu_zy*F0y+nu_zz*F0z+mu_zz*F1z)*sim.par.dt;
+  std::cout << "expected x displacement is " << expecteddx << std::endl;
+  std::cout << "expected y displacement is " << expecteddy << std::endl;
+  std::cout << "expected z displacement is " << expecteddz << std::endl;
+  EXPECT_THAT(tolerance(dx, expecteddx), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dy, expecteddy), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dz, expecteddz), ::testing::IsTrue);
 }
 
-// // ############## Tests by Raul ############## //
-// TEST(DryWetMobility, CanBeCreated){
-//   using BD = DryWetBD;
-//   BD::Parameters par;
-//   par.temperature = 1.0;
-//   par.viscosity = 1.0;
-//   par.hydrodynamicRadius = 1.0;
-//   par.dt = 1.0;
-//   par.wetRadius = 0.9;
-//   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
-//   par.H = 16;
-//   par.Lxy = 32;
-//   auto pd = std::make_shared<ParticleData>(1);
-//   auto bd = std::make_shared<BD>(pd, par);
-// }
+// ############## Tests by Raul ############## //
+TEST(DryWetMobility, CanBeCreated){
+  using BD = DryWetBD;
+  BD::Parameters par;
+  par.temperature = 1.0;
+  par.viscosity = 1.0;
+  par.hydrodynamicRadius = 1.0;
+  par.dt = 1.0;
+  par.wetRadius = 0.9;
+  par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  par.H = 16;
+  par.Lxy = 32;
+  auto pd = std::make_shared<ParticleData>(1);
+  auto bd = std::make_shared<BD>(pd, par);
+}
 
 
-// TEST(FullDryMobility, SelfMobilityIsCorrect){
-//   using BD = DryWetBD;
-//   writeDefaultMobilityFile();
-//   BD::Parameters par;
-//   par.temperature = 0;
-//   par.viscosity = 1.0/(6*M_PI);
-//   par.hydrodynamicRadius = 1.0;
-//   par.dt = 1.0;
-//   par.wetRadius = -1;
-//   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
-//   par.dryMobilityFile = "uniformMob.dat";
-//   par.H = 32;
-//   par.Lxy = 64;
-//   auto pd = std::make_shared<ParticleData>(1);
-//   pd->getPos(access::cpu, access::write)[0] = real4();
-//   auto bd = std::make_shared<BD>(pd, par);
-//   bd->addInteractor(std::make_shared<miniInteractor>(pd));
-//   bd->forwardTime();
-//   real M0 = pd->getPos(access::cpu, access::write)[0].x;
-//   ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-5));
-// }
+TEST(FullDryMobility, SelfMobilityIsCorrect){
+  using BD = DryWetBD;
+  writeDefaultMobilityFile();
+  BD::Parameters par;
+  par.temperature = 0;
+  par.viscosity = 1.0/(6*M_PI);
+  par.hydrodynamicRadius = 1.0;
+  par.dt = 1.0;
+  par.wetRadius = -1;
+  par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  par.dryMobilityFile = "uniformMob.dat";
+  par.H = 32;
+  par.Lxy = 64;
+  auto pd = std::make_shared<ParticleData>(1);
+  pd->getPos(access::cpu, access::write)[0] = real4();
+  auto bd = std::make_shared<BD>(pd, par);
+  bd->addInteractor(std::make_shared<miniInteractor>(pd));
+  bd->forwardTime();
+  real M0 = pd->getPos(access::cpu, access::write)[0].x;
+  ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-5));
+}
 
-// TEST(FullWetMobility, SelfMobilityIsCorrectAtMiddlePlaneForLargeDomain){
-//   using BD = DryWetBD;
-//   writeDefaultMobilityFile();
-//   BD::Parameters par;
-//   par.temperature = 0;
-//   par.viscosity = 1.0/(6*M_PI);
-//   par.hydrodynamicRadius = 1.0;
-//   par.dt = 1.0;
-//   par.wetRadius = par.hydrodynamicRadius; //0<wetRadius<=hydrodynamicRadius means full wet
-//   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
-//   par.dryMobilityFile = "uniformMob.dat";
-//   par.H = 128;
-//   par.Lxy = 64;
-//   auto pd = std::make_shared<ParticleData>(1);
-//   pd->getPos(access::cpu, access::write)[0] = real4();
-//   auto bd = std::make_shared<BD>(pd, par);
-//   bd->addInteractor(std::make_shared<miniInteractor>(pd));
-//   bd->forwardTime();
-//   real M0 = pd->getPos(access::cpu, access::write)[0].x;
-//   ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-1));
-// }
+TEST(FullWetMobility, SelfMobilityIsCorrectAtMiddlePlaneForLargeDomain){
+  using BD = DryWetBD;
+  writeDefaultMobilityFile();
+  BD::Parameters par;
+  par.temperature = 0;
+  par.viscosity = 1.0/(6*M_PI);
+  par.hydrodynamicRadius = 1.0;
+  par.dt = 1.0;
+  par.wetRadius = par.hydrodynamicRadius; //0<wetRadius<=hydrodynamicRadius means full wet
+  par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  par.dryMobilityFile = "uniformMob.dat";
+  par.H = 128;
+  par.Lxy = 64;
+  auto pd = std::make_shared<ParticleData>(1);
+  pd->getPos(access::cpu, access::write)[0] = real4();
+  auto bd = std::make_shared<BD>(pd, par);
+  bd->addInteractor(std::make_shared<miniInteractor>(pd));
+  bd->forwardTime();
+  real M0 = pd->getPos(access::cpu, access::write)[0].x;
+  ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-1));
+}
 
 
-// //Asserts the correctness of the self mobility for a certain wet radius
-// //All other parameters are hardcoded, see the function.
-// //The total hydrodynamic radius is 1 (meaning that wetRadius >=1 is full wet)
-// void computeSelfMobilityWithWetRadius(real wetRadius){
-//   using BD = DryWetBD;
-//   writeDefaultMobilityFile();
-//   BD::Parameters par;
-//   par.temperature = 0;
-//   par.viscosity = 1.0/(6*M_PI);
-//   par.hydrodynamicRadius = 1.0;
-//   par.dt = 1.0;
-//   par.wetRadius = wetRadius;
-//   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
-//   par.dryMobilityFile = "uniformMob.dat";
-//   par.H = 64;
-//   par.Lxy = 64;
-//   auto pd = std::make_shared<ParticleData>(1);
-//   pd->getPos(access::cpu, access::write)[0] = real4();
-//   auto bd = std::make_shared<BD>(pd, par);
-//   bd->addInteractor(std::make_shared<miniInteractor>(pd));
-//   bd->forwardTime();
-//   real M0 = pd->getPos(access::cpu, access::write)[0].x;
-//   ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-1))<<"Failed with wet radius "<<wetRadius;
-// }
+//Asserts the correctness of the self mobility for a certain wet radius
+//All other parameters are hardcoded, see the function.
+//The total hydrodynamic radius is 1 (meaning that wetRadius >=1 is full wet)
+void computeSelfMobilityWithWetRadius(real wetRadius){
+  using BD = DryWetBD;
+  writeDefaultMobilityFile();
+  BD::Parameters par;
+  par.temperature = 0;
+  par.viscosity = 1.0/(6*M_PI);
+  par.hydrodynamicRadius = 1.0;
+  par.dt = 1.0;
+  par.wetRadius = wetRadius;
+  par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  par.dryMobilityFile = "uniformMob.dat";
+  par.H = 64;
+  par.Lxy = 64;
+  auto pd = std::make_shared<ParticleData>(1);
+  pd->getPos(access::cpu, access::write)[0] = real4();
+  auto bd = std::make_shared<BD>(pd, par);
+  bd->addInteractor(std::make_shared<miniInteractor>(pd));
+  bd->forwardTime();
+  real M0 = pd->getPos(access::cpu, access::write)[0].x;
+  ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-1))<<"Failed with wet radius "<<wetRadius;
+}
 
-// TEST(DryWetMobility, SelfMobilityIsCorrectForAnyWetRadius){
-//   real minWetRadius = 2;
-//   real maxWetRadius = 16;
-//   int Ntest = 4;
-//   fori(0, Ntest){
-//     real wetRadius = minWetRadius + i*(maxWetRadius - minWetRadius)/(Ntest-1);
-//     computeSelfMobilityWithWetRadius(wetRadius);
-//   }
-// }
+TEST(DryWetMobility, SelfMobilityIsCorrectForAnyWetRadius){
+  real minWetRadius = 2;
+  real maxWetRadius = 16;
+  int Ntest = 4;
+  fori(0, Ntest){
+    real wetRadius = minWetRadius + i*(maxWetRadius - minWetRadius)/(Ntest-1);
+    computeSelfMobilityWithWetRadius(wetRadius);
+  }
+}

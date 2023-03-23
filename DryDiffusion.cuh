@@ -340,7 +340,7 @@ auto computeMobilityDataForDryDiffusion(WetDryParameters par,
 					real hydrodynamicRadius){
   auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, hydrodynamicRadius);
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
-  constexpr int nsamples = 193;
+  constexpr int nsamples = 100;
   std::vector<real4> mobilityData(nsamples);
   for(int i = 0; i<nsamples; i++){
     real z = -par.H*0.5 + par.H*(i/real(nsamples-1));

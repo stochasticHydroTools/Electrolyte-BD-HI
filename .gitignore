@@ -1,0 +1,10 @@
+*converted*
+*~
+*aux
+*log
+*bbl
+*blg
+*out
+params/results/*/
+build/
+TESTS/

@@ -1,0 +1,15 @@
+This folder contains functions which are used in doubly periodic Poisson and Stokes flow. 
+BVPChebInt.m - solves the BVP y''-k^2*y=f for the Chebyshev coefficients of y''
+BCRows.m - generates the boundary condition rows for the matrix solve
+firstIntegralMatrix.m - generates a sparse tridiagonal matrix that maps the coefficients of the second derivative 
+to those of the first derivative
+secondIntegralMatrix.m - generates a sparse pentadiagonal matrix that maps the coefficients of the second derivative 
+to those of the function itself
+preComputeInts.m - precomputes the integrals of Chebyshev polynomials for later use
+SpreadWts.m - forms the spread and interpolation matrices via fast gaussian gridding in x and y
+clencurt.m - file from Trefethen's book that computes the Chebyshev nodes and quadrature wts
+ftransform.m - data to coefficients on the grid 
+btransform.m - coefficients to data on the grid 
+spread.m - spread from points to grid using the spread matrix computed in SpreadWts
+interpolate.m - interpolate at points from grid using the interpolation matrix computed in SpreadWts
+coeffInt.m - code to apply first integral matrix with a loop
