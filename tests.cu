@@ -13,19 +13,23 @@ using scalar = double;
 
 // A normalized measure for accuracy
 bool tolerance(scalar val, scalar expectedval, scalar numdigits = 2.0){
-  std::cout << val << " " << expectedval << std::endl;
-  if (abs(expectedval) > 1e-15){
-    scalar numCorrectDigits = log10(abs(expectedval/(val-expectedval)));
-    if (numCorrectDigits > numdigits){
-      return true;
-    } else {
-      return false;
-    }
+  // std::cout << val << " " << expectedval << std::endl;
+  if (val == expectedval){
+    return true;
   } else {
-    if (-log10(abs(val-expectedval))>14){
-      return true;
+    if (abs(expectedval) > 1e-15){
+      scalar numCorrectDigits = log10(abs(expectedval/(val-expectedval)));
+      if (numCorrectDigits > numdigits){
+	return true;
+      } else {
+	return false;
+      }
     } else {
-      return false;
+      if (-log10(abs(val-expectedval))>14){
+	return true;
+      } else {
+	return false;
+      }
     }
   }
 
@@ -382,6 +386,8 @@ TEST(FULLDRY, Integration){
   scalar dx = sim.pd->getPos(access::cpu, access::write)[0].x-xp0;
   scalar dy = sim.pd->getPos(access::cpu, access::write)[0].y-yp0;
   scalar dz = sim.pd->getPos(access::cpu, access::write)[0].z-zp0;
+  std::ofstream out("FULLDRYdisplacements.dat");// Will be needed for the next test (periodicity)
+  out << dx << " " << dy << " " << dz << std::endl;
   std::cout << "x displacement is " << dx << std::endl;
   std::cout << "y displacement is " << dy << std::endl;
   std::cout << "z displacement is " << dz << std::endl;
@@ -399,6 +405,95 @@ TEST(FULLDRY, Integration){
   EXPECT_THAT(tolerance(dz, expecteddz), ::testing::IsTrue);
 }
 
+
+// Full Dry Mode: periodicity
+// This test follows the previous test.
+TEST(FULLDRY, Periodicity){
+  UAMMD sim;
+  
+  sim.par.numberParticles = 2;
+  sim.pd = std::make_shared<ParticleData>(sim.par.numberParticles);
+  
+  sim.par.Lxy = 76.8;
+  sim.par.H = 19.2;
+  scalar yp0  = 0.5*sim.par.Lxy;
+  scalar yp1  = yp0;
+  scalar zp0 = -0.5*sim.par.H+4;
+  scalar zp1 = -0.5*sim.par.H+7;
+  scalar xp0 = 1*sim.par.Lxy+2;// Moved to the next block
+  scalar xp1 = 1*sim.par.Lxy-2;
+  
+  sim.pd->getPos(access::location::cpu, access::mode::write)[0] = {xp0,yp0,zp0};
+  sim.pd->getPos(access::location::cpu, access::mode::write)[1] = {xp1,yp1,zp1};
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[0] = 1;
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[1] = -1;
+
+  sim.par.gw = 0.25;
+  sim.par.permitivity = 1;
+  sim.par.permitivityTop = 0.05;
+  sim.par.permitivityBottom = 0.05;
+  sim.par.Nxy = 72;
+  sim.par.temperature = 0;
+  sim.par.viscosity = 1.0/(6*M_PI);
+  sim.par.hydrodynamicRadius = 1.0;
+  sim.par.wetHydrodynamicRadius = -1;
+  sim.par.dt = 0.01;
+  sim.par.brownianUpdateRule = "EulerMaruyama";
+
+  using DPP = DPPoissonSlab;
+  DPP::Parameters par;
+  par.Lxy = make_real2(sim.par.Lxy);
+  par.H = sim.par.H;
+  par.gw = sim.par.gw;
+  DPP::Permitivity perm;
+  perm.inside = sim.par.permitivity;
+  perm.top = sim.par.permitivityTop;
+  perm.bottom = sim.par.permitivityBottom;
+  par.permitivity = perm;
+  par.Nxy = sim.par.Nxy;
+  auto poisson = std::make_shared<DPPoissonSlab>(sim.pd, par);
+  thrust::device_vector<real4> field = poisson->computeFieldAtParticles();
+  std::vector<real4> fieldAtParticles;
+  fieldAtParticles.resize(field.size());
+  thrust::copy(field.begin(), field.end(), fieldAtParticles.begin());
+  scalar F0x = fieldAtParticles[0].x;
+  scalar F0y = fieldAtParticles[0].y;
+  scalar F0z = fieldAtParticles[0].z;
+  
+  using BD = DryWetBD;
+  BD::Parameters parBD;
+  // writeDefaultMobilityFile();
+  // parBD.dryMobilityFile = "uniformMob.dat";
+  parBD.temperature = sim.par.temperature;
+  parBD.viscosity = sim.par.viscosity;
+  parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
+  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.dt = sim.par.dt;
+  parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  parBD.Lxy = sim.par.Lxy;
+  parBD.H = sim.par.H;
+  auto bd = std::make_shared<BD>(sim.pd, parBD);
+  bd->addInteractor(poisson);
+  bd->forwardTime();
+  
+  scalar dx = sim.pd->getPos(access::cpu, access::write)[0].x-xp0;
+  scalar dy = sim.pd->getPos(access::cpu, access::write)[0].y-yp0;
+  scalar dz = sim.pd->getPos(access::cpu, access::write)[0].z-zp0;
+  std::ifstream in("FULLDRYdisplacements.dat");// Should be available from the previous test
+  double s;
+  std::vector<double> expectedvals;
+  while(in >> s){
+    expectedvals.push_back(s);
+  }
+  
+  std::cout << "x displacement is " << dx << std::endl;
+  std::cout << "y displacement is " << dy << std::endl;
+  std::cout << "z displacement is " << dz << std::endl;
+  
+  EXPECT_THAT(tolerance(dx, expectedvals[0]), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dy, expectedvals[1]), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dz, expectedvals[2]), ::testing::IsTrue);
+}
 
 // Full Wet Mode: Test if an integration works for a pair of particles interacting electrostatically
 TEST(FULLWET, Integration){
@@ -481,6 +576,8 @@ TEST(FULLWET, Integration){
   scalar dx = sim.pd->getPos(access::cpu, access::write)[1].x-xp1;
   scalar dy = sim.pd->getPos(access::cpu, access::write)[1].y-yp1;
   scalar dz = sim.pd->getPos(access::cpu, access::write)[1].z-zp1;
+  std::ofstream out("FULLWETdisplacements.dat");// Will be needed for the next test (periodicity)
+  out << dx << " " << dy << " " << dz << std::endl;
   std::cout << "x displacement is " << dx << std::endl;
   std::cout << "y displacement is " << dy << std::endl;
   std::cout << "z displacement is " << dz << std::endl;
@@ -508,6 +605,105 @@ TEST(FULLWET, Integration){
   EXPECT_THAT(tolerance(dy, expecteddy), ::testing::IsTrue);
   EXPECT_THAT(tolerance(dz, expecteddz), ::testing::IsTrue);
 }
+
+// Full Wet Mode: periodicity
+// This test follows the previous test.
+TEST(FULLWET, Periodicity){
+  UAMMD sim;
+  
+  sim.par.numberParticles = 2;
+  sim.pd = std::make_shared<ParticleData>(sim.par.numberParticles);
+  sim.par.Lxy = 76.8;
+  sim.par.H = 19.2;
+  scalar yp0  = 0.5*sim.par.Lxy;
+  scalar yp1  = yp0;
+  scalar zp0 = -0.5*sim.par.H+4;
+  scalar zp1 = -0.5*sim.par.H+7;
+  scalar xp0 = 1*sim.par.Lxy+2;// Moved to the next block
+  scalar xp1 = 1*sim.par.Lxy-2;
+  
+  sim.pd->getPos(access::location::cpu, access::mode::write)[0] = {xp0,yp0,zp0};
+  sim.pd->getPos(access::location::cpu, access::mode::write)[1] = {xp1,yp1,zp1};
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[0] = 1;
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[1] = -1;
+
+  real c0 = sim.pd->getCharge(access::location::cpu, access::mode::read)[0];
+  real c1 = sim.pd->getCharge(access::location::cpu, access::mode::read)[1];
+   
+  sim.par.gw = 0.25;
+  sim.par.permitivity = 1;
+  sim.par.permitivityTop = 0.05;
+  sim.par.permitivityBottom = 0.05;
+  sim.par.Nxy = 135;
+  sim.par.temperature = 0;
+  sim.par.viscosity = 1.0/(6*M_PI);
+  sim.par.hydrodynamicRadius = 1.0;
+  sim.par.wetHydrodynamicRadius = 1.0;
+  sim.par.dt = 1;
+  sim.par.brownianUpdateRule = "EulerMaruyama";
+
+  using DPP = DPPoissonSlab;
+  DPP::Parameters par;
+  par.Lxy = make_real2(sim.par.Lxy);
+  par.H = sim.par.H;
+  par.gw = sim.par.gw;
+  DPP::Permitivity perm;
+  perm.inside = sim.par.permitivity;
+  perm.top = sim.par.permitivityTop;
+  perm.bottom = sim.par.permitivityBottom;
+  par.permitivity = perm;
+  par.Nxy = sim.par.Nxy;
+  auto poisson = std::make_shared<DPPoissonSlab>(sim.pd, par);
+  thrust::device_vector<real4> field = poisson->computeFieldAtParticles();
+  std::vector<real4> fieldAtParticles;
+  fieldAtParticles.resize(field.size());
+  thrust::copy(field.begin(), field.end(), fieldAtParticles.begin());
+  scalar F0x = c0*fieldAtParticles[0].x;
+  scalar F0y = c0*fieldAtParticles[0].y;
+  scalar F0z = c0*fieldAtParticles[0].z;
+  scalar F1x = c1*fieldAtParticles[1].x;
+  scalar F1y = c1*fieldAtParticles[1].y;
+  scalar F1z = c1*fieldAtParticles[1].z;
+  std::cout << "F0x = " << F0x << std::endl;
+  std::cout << "F0y = " << F0y << std::endl;
+  std::cout << "F0z = " << F0z << std::endl;
+  std::cout << "F1x = " << F1x << std::endl;
+  std::cout << "F1y = " << F1y << std::endl;
+  std::cout << "F1z = " << F1z << std::endl;
+  
+  using BD = DryWetBD;
+  BD::Parameters parBD;
+  parBD.temperature = sim.par.temperature;
+  parBD.viscosity = sim.par.viscosity;
+  parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
+  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.dt = sim.par.dt;
+  parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  parBD.Lxy = sim.par.Lxy;
+  parBD.H = sim.par.H;
+  auto bd = std::make_shared<BD>(sim.pd, parBD);
+  bd->addInteractor(poisson);
+  bd->forwardTime();
+
+  scalar dx = sim.pd->getPos(access::cpu, access::write)[1].x-xp1;
+  scalar dy = sim.pd->getPos(access::cpu, access::write)[1].y-yp1;
+  scalar dz = sim.pd->getPos(access::cpu, access::write)[1].z-zp1;
+  std::ifstream in("FULLWETdisplacements.dat");// Should be available from the previous test
+  double s;
+  std::vector<double> expectedvals;
+  while(in >> s){
+    expectedvals.push_back(s);
+  }
+  
+  std::cout << "x displacement is " << dx << std::endl;
+  std::cout << "y displacement is " << dy << std::endl;
+  std::cout << "z displacement is " << dz << std::endl;
+  
+  EXPECT_THAT(tolerance(dx, expectedvals[0]), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dy, expectedvals[1]), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dz, expectedvals[2]), ::testing::IsTrue);
+}
+
 
 // ############## Tests by Raul ############## //
 TEST(DryWetMobility, CanBeCreated){

@@ -7,14 +7,14 @@ domType = 'DPSC'
 
 eta = 1/6/np.sqrt(np.pi)
 radP = 1.0
-xmin = 0.0; xmax = 76.8*radP
-ymin = 0.0; ymax = 76.8*radP
-zmin = 0.0; zmax = 19.2*radP
+xmin = 0.0; xmax = 76.8
+ymin = 0.0; ymax = 76.8
+zmin = 0.0; zmax = 19.2
 
 solver = FCMJoint(device); nP = 2
 M = np.zeros((3*nP, 3*nP), dtype = np.double)
 
-xsep = 4*radP
+xsep = 4
 xPs = np.zeros(3*nP, dtype = np.double)
 xPs = np.array([xmax/2+xsep/2, ymax/2, 4, xmax/2-xsep/2, ymax/2, 7], dtype = np.double)
 
@@ -32,5 +32,5 @@ if domType == 'DPBW':
 elif domType == 'DPSC':
   outname = 'pair_mobility_sc.mat'
   
-scipy.io.savemat(outname, dict(M=M, xPs=xPs/radP))
+scipy.io.savemat(outname, dict(M=M, xPs=xPs))
 
