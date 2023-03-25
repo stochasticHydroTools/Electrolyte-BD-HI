@@ -151,7 +151,8 @@ struct Parameters{
   real beta = 10.13641758;
   int nxy_stokes;
   int nz_stokes;
-
+  real hxy_stokes;
+  
   real3 externalField;
   int fold;
 };
@@ -228,6 +229,7 @@ auto createIntegrator(UAMMD sim){
   par.dryMobilityFile = sim.par.mobilityFile;
   par.H = sim.par.H;
   par.Lxy = sim.par.Lxy;
+  //par.hxy_stokes = sim.par.hxy_stokes
   // par.w = sim.par.w;
   // par.nxy_stokes = sim.par.nxy_stokes;
   // par.nz_stokes = sim.par.nz_stokes;
@@ -511,6 +513,7 @@ Parameters readParameters(std::string datamain){
 
   in.getOption("bottomWallSurfaceValue", InputFile::Optional)>>par.bottomWallSurfaceValue;
 
+  // in.getOption("hxy_stokes", InputFile::Required)>>par.hxy_stokes;
   // in.getOption("w", InputFile::Required)>>par.w;
   // in.getOption("beta", InputFile::Required)>>par.beta;
   // in.getOption("nxy_stokes", InputFile::Required)>>par.nxy_stokes;

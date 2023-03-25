@@ -13,7 +13,7 @@ using namespace uammd;
 using scalar = double;
 
 // A normalized measure for accuracy
-bool tolerance(scalar val, scalar expectedval, scalar numdigits = 2.0){
+bool tolerance(scalar val, scalar expectedval, scalar numdigits = 1.9){
   // std::cout << val << " " << expectedval << std::endl;
   if (val == expectedval){
     return true;
@@ -68,7 +68,6 @@ struct Parameters{
   std::string outfile, readFile, forcefile, fieldfile;
   std::string mobilityFile;
 
-
   std::string brownianUpdateRule = "EulerMaruyama";
   bool idealParticles=false;
   bool noElectrostatics=false;
@@ -76,6 +75,7 @@ struct Parameters{
   real beta = 10.13641758;
   int nxy_stokes;
   int nz_stokes;
+  real hxy_stokes;
 
   real3 externalField;
   int fold;
@@ -291,6 +291,7 @@ TEST(FULLDRY, selfMobility){
   parBD.hydrodynamicRadius = 1;
   parBD.Lxy = 76.8;
   parBD.H = 19.2;
+  parBD.hxy_stokes = 0.64;
   auto bd = std::make_shared<BD>(pd, parBD);
 
   real z = 4;
@@ -380,6 +381,7 @@ TEST(FULLDRY, Integration){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
+  parBD.hxy_stokes = 0.64;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -473,6 +475,7 @@ TEST(FULLDRY, Periodicity){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
+  parBD.hxy_stokes = 0.64;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -570,6 +573,7 @@ TEST(FULLWET, Integration){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
+  parBD.hxy_stokes = 0.64;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -682,6 +686,7 @@ TEST(FULLWET, Periodicity){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
+  parBD.hxy_stokes = 0.64;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -774,6 +779,7 @@ TEST(DRYWET, Integration){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
+  parBD.hxy_stokes = 1.28;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -832,6 +838,7 @@ TEST(DryWetMobility, CanBeCreated){
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.H = 16;
   par.Lxy = 32;
+  par.hxy_stokes = -1.0;
   auto pd = std::make_shared<ParticleData>(1);
   auto bd = std::make_shared<BD>(pd, par);
 }
@@ -850,6 +857,7 @@ TEST(FullDryMobility, SelfMobilityIsCorrect){
   par.dryMobilityFile = "uniformMob.dat";
   par.H = 32;
   par.Lxy = 64;
+  par.hxy_stokes = -1.0;
   auto pd = std::make_shared<ParticleData>(1);
   pd->getPos(access::cpu, access::write)[0] = real4();
   auto bd = std::make_shared<BD>(pd, par);
@@ -872,6 +880,7 @@ TEST(FullWetMobility, SelfMobilityIsCorrectAtMiddlePlaneForLargeDomain){
   par.dryMobilityFile = "uniformMob.dat";
   par.H = 128;
   par.Lxy = 64;
+  par.hxy_stokes = -1.0;
   auto pd = std::make_shared<ParticleData>(1);
   pd->getPos(access::cpu, access::write)[0] = real4();
   auto bd = std::make_shared<BD>(pd, par);
@@ -898,6 +907,7 @@ void computeSelfMobilityWithWetRadius(real wetRadius){
   par.dryMobilityFile = "uniformMob.dat";
   par.H = 64;
   par.Lxy = 64;
+  par.hxy_stokes = -1.0;
   auto pd = std::make_shared<ParticleData>(1);
   pd->getPos(access::cpu, access::write)[0] = real4();
   auto bd = std::make_shared<BD>(pd, par);

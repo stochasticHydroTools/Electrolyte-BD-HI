@@ -184,7 +184,7 @@ public:
     this->m0 = 1.0/(6*M_PI*viscosity*dryHydrodynamicRadius);
   }
 
-  //This constructor requires a  viscosity, a dry hydrodynamic radius,
+  //This constructor requires a viscosity, a dry hydrodynamic radius,
   //the  height of  the  domain  and the  name  of  a file  containing
   //mobility data as required by the readMobilityFile function.
   DryMobilityWithThermalDrift(real viscosity, real dryHydrodynamicRadius,
@@ -220,6 +220,7 @@ struct WetDryParameters: BD::Parameters{
   std::string dryMobilityFile;
   real Lxy;
   real H;
+  real hxy_stokes;
   // int w;
   // int nxy_stokes;
   // int nz_stokes;
@@ -248,8 +249,11 @@ namespace dry_detail{
 //a hydrodynamic radius this function returns the parameters needed by
 //DPStokes. Parameters for a support of w=6 according to the paper
 //Note that this function does not set the temperature nor the time step.
-auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius){
-  real h = hydrodynamicRadius/1.554;
+auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius, real h){
+  if (h < 0){
+    h = hydrodynamicRadius/1.554;
+  }
+  // std::cout << "h_xy is " << h << std::endl;
   int nxy = int(Lxy/h +0.5);
   DPStokesSlab_ns::DPStokes::Parameters par;
   par.nx = nxy;
@@ -272,10 +276,11 @@ auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrod
 //parameters. This function calls getDPStokesParameters and adapts the
 //output.
 using DPStokes = DPStokesSlab_ns::DPStokesIntegrator;
-auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius){
-  auto par = getDPStokesParamtersOnlyForce(Lxy, H, viscosity, hydrodynamicRadius);
+auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius, real h){
+  auto par = getDPStokesParamtersOnlyForce(Lxy, H, viscosity, hydrodynamicRadius, h);
   DPStokes::Parameters pari;
   pari.nx = par.nx;
+  // std::cout << "pari.nx = " << pari.nx << std::endl;
   pari.ny = par.ny;
   pari.nz = par.nz;
   pari.w = par.w;
@@ -300,7 +305,7 @@ public:
   WetMobilityDPStokes(WetDryParameters par, std::shared_ptr<ParticleData> pd):
     pd(pd){
     auto dpstokes_par = getDPStokesIntegratorParamtersOnlyForce(par.Lxy, par.H,
-								par.viscosity, par.wetRadius);
+								par.viscosity, par.wetRadius, par.hxy_stokes);
     dpstokes_par.dt = par.dt;
     dpstokes_par.temperature = par.temperature;
     this->temperature = par.temperature;
@@ -338,7 +343,7 @@ public:
 //several heights.
 auto computeMobilityDataForDryDiffusion(WetDryParameters par,
 					real hydrodynamicRadius){
-  auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, hydrodynamicRadius);
+  auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, hydrodynamicRadius, par.hxy_stokes);
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
   constexpr int nsamples = 100;
   std::vector<real4> mobilityData(nsamples);
@@ -367,7 +372,7 @@ auto computeMobilityDataForDryDiffusion(WetDryParameters par,
 
 //Computes self mobility at a given location
 real4 computeSelfMobility(WetDryParameters par, real z){
-  auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, par.hydrodynamicRadius);
+  auto dppar = getDPStokesParamtersOnlyForce(par.Lxy, par.H, par.viscosity, par.hydrodynamicRadius, par.hxy_stokes);
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
   real4 mobilityData;
 
