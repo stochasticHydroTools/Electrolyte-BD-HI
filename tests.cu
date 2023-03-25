@@ -6,7 +6,8 @@
 #include <random>
 #include <fstream>
 #include "DryDiffusion.cuh"
-#include"Interactor/DoublyPeriodic/DPPoissonSlab.cuh"
+#include "Interactor/DoublyPeriodic/DPPoissonSlab.cuh"
+#include "/usr/include/eigen3/Eigen/Dense"
 using namespace uammd;
 
 using scalar = double;
@@ -495,7 +496,7 @@ TEST(FULLDRY, Periodicity){
   EXPECT_THAT(tolerance(dz, expectedvals[2]), ::testing::IsTrue);
 }
 
-// Full Wet Mode: Test if an integration works for a pair of particles interacting electrostatically
+// Full Wet Mode: Test if an integration works for a pair of particles
 TEST(FULLWET, Integration){
   UAMMD sim;
   
@@ -704,6 +705,120 @@ TEST(FULLWET, Periodicity){
   EXPECT_THAT(tolerance(dz, expectedvals[2]), ::testing::IsTrue);
 }
 
+
+// 50% Wet, 50% Dry: Test if an integration works for a pair of particles
+TEST(DRYWET, Integration){
+  using Eigen::MatrixXd;
+  using Eigen::VectorXd;
+  UAMMD sim;
+  
+  sim.par.numberParticles = 2;
+  sim.pd = std::make_shared<ParticleData>(sim.par.numberParticles);
+  sim.par.Lxy = 76.8;
+  sim.par.H = 19.2;
+  scalar yp0  = 0.5*sim.par.Lxy;
+  scalar yp1  = yp0;
+  scalar zp0 = -0.5*sim.par.H+4;
+  scalar zp1 = -0.5*sim.par.H+7;
+  scalar xp0 = 0.5*sim.par.Lxy+2;
+  scalar xp1 = 0.5*sim.par.Lxy-2;
+  
+  sim.pd->getPos(access::location::cpu, access::mode::write)[0] = {xp0,yp0,zp0};
+  sim.pd->getPos(access::location::cpu, access::mode::write)[1] = {xp1,yp1,zp1};
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[0] = 1;
+  sim.pd->getCharge(access::location::cpu, access::mode::write)[1] = -1;
+
+  real c0 = sim.pd->getCharge(access::location::cpu, access::mode::read)[0];
+  real c1 = sim.pd->getCharge(access::location::cpu, access::mode::read)[1];
+   
+  sim.par.gw = 0.25;
+  sim.par.permitivity = 1;
+  sim.par.permitivityTop = 0.05;
+  sim.par.permitivityBottom = 0.05;
+  sim.par.Nxy = 135;
+  sim.par.temperature = 0;
+  sim.par.viscosity = 1.0/(6*M_PI);
+  sim.par.hydrodynamicRadius = 1.0;
+  sim.par.wetHydrodynamicRadius = 2.0;
+  sim.par.dt = 1;
+  sim.par.brownianUpdateRule = "EulerMaruyama";
+
+  using DPP = DPPoissonSlab;
+  DPP::Parameters par;
+  par.Lxy = make_real2(sim.par.Lxy);
+  par.H = sim.par.H;
+  par.gw = sim.par.gw;
+  DPP::Permitivity perm;
+  perm.inside = sim.par.permitivity;
+  perm.top = sim.par.permitivityTop;
+  perm.bottom = sim.par.permitivityBottom;
+  par.permitivity = perm;
+  par.Nxy = sim.par.Nxy;
+  auto poisson = std::make_shared<DPPoissonSlab>(sim.pd, par);
+  thrust::device_vector<real4> field = poisson->computeFieldAtParticles();
+  std::vector<real4> fieldAtParticles;
+  fieldAtParticles.resize(field.size());
+  thrust::copy(field.begin(), field.end(), fieldAtParticles.begin());
+
+  VectorXd F(6);
+  F << c0*fieldAtParticles[0].x, c0*fieldAtParticles[0].y, c0*fieldAtParticles[0].z,
+       c1*fieldAtParticles[1].x, c1*fieldAtParticles[1].y, c1*fieldAtParticles[1].z;
+  
+  using BD = DryWetBD;
+  BD::Parameters parBD;
+  parBD.temperature = sim.par.temperature;
+  parBD.viscosity = sim.par.viscosity;
+  parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
+  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.dt = sim.par.dt;
+  parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
+  parBD.Lxy = sim.par.Lxy;
+  parBD.H = sim.par.H;
+  auto bd = std::make_shared<BD>(sim.pd, parBD);
+  bd->addInteractor(poisson);
+  bd->forwardTime();
+
+  scalar dx = sim.pd->getPos(access::cpu, access::write)[1].x-xp1;
+  scalar dy = sim.pd->getPos(access::cpu, access::write)[1].y-yp1;
+  scalar dz = sim.pd->getPos(access::cpu, access::write)[1].z-zp1;
+  std::cout << "x displacement is " << dx << std::endl;
+  std::cout << "y displacement is " << dy << std::endl;
+  std::cout << "z displacement is " << dz << std::endl;
+
+  // mobility matrix computed by the DPStokes solver (python interface)
+  MatrixXd mWet(6,6);
+  mWet.row(0) << 0.708884362108862, 0, 0, 0.257442239887106, 0, -0.126448728742101;
+  mWet.row(1) << 0, 0.708894111245968, 0, 0, 0.120242666875890, 0;
+  mWet.row(2) << 0, 0, 0.489019735544522, -0.051068001579525, 0, 0.081803173383461;
+  mWet.row(3) << 0.257442991316777, 0, -0.051065753076216, 0.791052032682486, 0, 0;
+  mWet.row(4) << 0, 0.120242407250183, 0, 0, 0.791061727610104, 0;
+  mWet.row(5) << -0.126448405742272, 0, 0.081803264694953, 0, 0, 0.666364258639729;
+  std::cout << "M_wet = " << std::endl;
+  std::cout << mWet << std::endl;
+
+  MatrixXd mDry(6,6);
+  mDry.row(0) << 0.708884362108862, 0, 0, 0, 0, 0;
+  mDry.row(1) << 0, 0.708894111245968, 0, 0, 0, 0;
+  mDry.row(2) << 0, 0, 0.489019735544522, 0, 0, 0;
+  mDry.row(3) << 0, 0, 0, 0.791052032682486, 0, 0;
+  mDry.row(4) << 0, 0, 0, 0, 0.791061727610104, 0;
+  mDry.row(5) << 0, 0, 0, 0, 0, 0.666364258639729;
+  std::cout << "M_dry = " << std::endl;
+  std::cout << mDry << std::endl;
+
+  VectorXd displacement(6);
+  displacement = 0.5*(mWet+mDry)*F*sim.par.dt;
+
+  scalar expecteddx = displacement(3);
+  scalar expecteddy = displacement(4);
+  scalar expecteddz = displacement(5);
+  std::cout << "expected x displacement is " << expecteddx << std::endl;
+  std::cout << "expected y displacement is " << expecteddy << std::endl;
+  std::cout << "expected z displacement is " << expecteddz << std::endl;
+  EXPECT_THAT(tolerance(dx, expecteddx), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dy, expecteddy), ::testing::IsTrue);
+  EXPECT_THAT(tolerance(dz, expecteddz), ::testing::IsTrue);
+}
 
 // ############## Tests by Raul ############## //
 TEST(DryWetMobility, CanBeCreated){
