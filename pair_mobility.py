@@ -6,7 +6,7 @@ device = 'cpu'
 domType = 'DPSC'
 
 eta = 1/6/np.sqrt(np.pi)
-radP = 1.0
+radP = 2.0
 xmin = 0.0; xmax = 76.8
 ymin = 0.0; ymax = 76.8
 zmin = 0.0; zmax = 19.2
