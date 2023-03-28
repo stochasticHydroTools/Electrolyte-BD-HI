@@ -58,7 +58,7 @@ struct Parameters{
   real bottomWallSurfaceValue = 0;
 
   int numberSteps, printSteps, relaxSteps;
-  real dt, viscosity, hydrodynamicRadius, wetHydrodynamicRadius;
+  real dt, viscosity, hydrodynamicRadius, wetHydrodynamicRadius, wetFraction;
 
   real gw;
   real U0, sigma, r_m, p, cutOff;
@@ -184,7 +184,7 @@ TEST(FULLDRY, SimpleIntegration){
   par.viscosity = 1.0/(6*M_PI);
   par.hydrodynamicRadius = 1.0;
   par.dt = 1.0;
-  par.wetRadius = -1;
+  par.wetFraction = 0;
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.H = 19.2;
   par.Lxy = 76.8;
@@ -227,7 +227,7 @@ TEST(FULLDRY, IntegrationFlatMobility){
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
-  sim.par.wetHydrodynamicRadius = -1;
+  sim.par.wetFraction = 0;
   sim.par.dt = 0.01;
   sim.par.brownianUpdateRule = "EulerMaruyama";
 
@@ -258,7 +258,7 @@ TEST(FULLDRY, IntegrationFlatMobility){
   parBD.temperature = sim.par.temperature;
   parBD.viscosity = sim.par.viscosity;
   parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
-  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.wetFraction = sim.par.wetFraction;
   parBD.dt = sim.par.dt;
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
@@ -292,6 +292,7 @@ TEST(FULLDRY, selfMobility){
   parBD.Lxy = 76.8;
   parBD.H = 19.2;
   parBD.hxy_stokes = 0.64;
+  parBD.wetFraction = 0;
   auto bd = std::make_shared<BD>(pd, parBD);
 
   real z = 4;
@@ -344,7 +345,7 @@ TEST(FULLDRY, Integration){
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
-  sim.par.wetHydrodynamicRadius = -1;
+  sim.par.wetFraction = 0;
   sim.par.dt = 0.01;
   sim.par.brownianUpdateRule = "EulerMaruyama";
 
@@ -376,7 +377,7 @@ TEST(FULLDRY, Integration){
   parBD.temperature = sim.par.temperature;
   parBD.viscosity = sim.par.viscosity;
   parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
-  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.wetFraction = sim.par.wetFraction;
   parBD.dt = sim.par.dt;
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
@@ -439,7 +440,7 @@ TEST(FULLDRY, Periodicity){
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
-  sim.par.wetHydrodynamicRadius = -1;
+  sim.par.wetFraction = 0;
   sim.par.dt = 0.01;
   sim.par.brownianUpdateRule = "EulerMaruyama";
 
@@ -470,7 +471,7 @@ TEST(FULLDRY, Periodicity){
   parBD.temperature = sim.par.temperature;
   parBD.viscosity = sim.par.viscosity;
   parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
-  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.wetFraction = sim.par.wetFraction;
   parBD.dt = sim.par.dt;
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
@@ -530,7 +531,7 @@ TEST(FULLWET, Integration){
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
-  sim.par.wetHydrodynamicRadius = 1.0;
+  sim.par.wetFraction = 1;
   sim.par.dt = 1;
   sim.par.brownianUpdateRule = "EulerMaruyama";
 
@@ -568,7 +569,7 @@ TEST(FULLWET, Integration){
   parBD.temperature = sim.par.temperature;
   parBD.viscosity = sim.par.viscosity;
   parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
-  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.wetFraction = sim.par.wetFraction;
   parBD.dt = sim.par.dt;
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
@@ -643,7 +644,7 @@ TEST(FULLWET, Periodicity){
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
-  sim.par.wetHydrodynamicRadius = 1.0;
+  sim.par.wetFraction = 1;
   sim.par.dt = 1;
   sim.par.brownianUpdateRule = "EulerMaruyama";
 
@@ -681,7 +682,7 @@ TEST(FULLWET, Periodicity){
   parBD.temperature = sim.par.temperature;
   parBD.viscosity = sim.par.viscosity;
   parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
-  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.wetFraction = sim.par.wetFraction;
   parBD.dt = sim.par.dt;
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
@@ -744,7 +745,7 @@ TEST(DRYWET, Integration){
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
-  sim.par.wetHydrodynamicRadius = 2.0;
+  sim.par.wetFraction = 0.5;
   sim.par.dt = 1;
   sim.par.brownianUpdateRule = "EulerMaruyama";
 
@@ -774,7 +775,7 @@ TEST(DRYWET, Integration){
   parBD.temperature = sim.par.temperature;
   parBD.viscosity = sim.par.viscosity;
   parBD.hydrodynamicRadius = sim.par.hydrodynamicRadius;
-  parBD.wetRadius = sim.par.wetHydrodynamicRadius;
+  parBD.wetFraction = sim.par.wetFraction;
   parBD.dt = sim.par.dt;
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
@@ -834,7 +835,7 @@ TEST(DryWetMobility, CanBeCreated){
   par.viscosity = 1.0;
   par.hydrodynamicRadius = 1.0;
   par.dt = 1.0;
-  par.wetRadius = 0.9;
+  par.wetFraction = 0.7;
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.H = 16;
   par.Lxy = 32;
@@ -852,7 +853,7 @@ TEST(FullDryMobility, SelfMobilityIsCorrect){
   par.viscosity = 1.0/(6*M_PI);
   par.hydrodynamicRadius = 1.0;
   par.dt = 1.0;
-  par.wetRadius = -1;
+  par.wetFraction = 0;
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.dryMobilityFile = "uniformMob.dat";
   par.H = 32;
@@ -875,7 +876,7 @@ TEST(FullWetMobility, SelfMobilityIsCorrectAtMiddlePlaneForLargeDomain){
   par.viscosity = 1.0/(6*M_PI);
   par.hydrodynamicRadius = 1.0;
   par.dt = 1.0;
-  par.wetRadius = par.hydrodynamicRadius; //0<wetRadius<=hydrodynamicRadius means full wet
+  par.wetFraction = 1;
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.dryMobilityFile = "uniformMob.dat";
   par.H = 128;
@@ -893,8 +894,8 @@ TEST(FullWetMobility, SelfMobilityIsCorrectAtMiddlePlaneForLargeDomain){
 
 //Asserts the correctness of the self mobility for a certain wet radius
 //All other parameters are hardcoded, see the function.
-//The total hydrodynamic radius is 1 (meaning that wetRadius >=1 is full wet)
-void computeSelfMobilityWithWetRadius(real wetRadius){
+//The total hydrodynamic radius is 1
+void computeSelfMobilityWithWetRadius(real wetFraction){
   using BD = DryWetBD;
   writeDefaultMobilityFile();
   BD::Parameters par;
@@ -902,7 +903,7 @@ void computeSelfMobilityWithWetRadius(real wetRadius){
   par.viscosity = 1.0/(6*M_PI);
   par.hydrodynamicRadius = 1.0;
   par.dt = 1.0;
-  par.wetRadius = wetRadius;
+  par.wetFraction = wetFraction;
   par.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   par.dryMobilityFile = "uniformMob.dat";
   par.H = 64;
@@ -914,15 +915,15 @@ void computeSelfMobilityWithWetRadius(real wetRadius){
   bd->addInteractor(std::make_shared<miniInteractor>(pd));
   bd->forwardTime();
   real M0 = pd->getPos(access::cpu, access::write)[0].x;
-  ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-1))<<"Failed with wet radius "<<wetRadius;
+  ASSERT_THAT(M0, ::testing::DoubleNear(1, 1e-1))<<"Failed with wet fraction "<<wetFraction;
 }
 
 TEST(DryWetMobility, SelfMobilityIsCorrectForAnyWetRadius){
-  real minWetRadius = 2;
-  real maxWetRadius = 16;
+  real minwetFraction = 0;
+  real maxwetFraction = 1;
   int Ntest = 4;
   fori(0, Ntest){
-    real wetRadius = minWetRadius + i*(maxWetRadius - minWetRadius)/(Ntest-1);
-    computeSelfMobilityWithWetRadius(wetRadius);
+    real wetFraction = minwetFraction + i*(maxwetFraction - minwetFraction)/(Ntest-1);
+    computeSelfMobilityWithWetRadius(wetFraction);
   }
 }

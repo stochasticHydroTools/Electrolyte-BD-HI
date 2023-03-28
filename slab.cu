@@ -133,7 +133,7 @@ struct Parameters{
   real bottomWallSurfaceValue = 0;
 
   int numberSteps, printSteps, relaxSteps;
-  real dt, viscosity, hydrodynamicRadius, wetHydrodynamicRadius;
+  real dt, viscosity, hydrodynamicRadius, wetHydrodynamicRadius, wetFraction;
 
   real gw;
   real U0, sigma, r_m, p, cutOff;
@@ -229,7 +229,7 @@ auto createIntegrator(UAMMD sim){
   par.dryMobilityFile = sim.par.mobilityFile;
   par.H = sim.par.H;
   par.Lxy = sim.par.Lxy;
-  //par.hxy_stokes = sim.par.hxy_stokes
+  par.hxy_stokes = sim.par.hxy_stokes;
   // par.w = sim.par.w;
   // par.nxy_stokes = sim.par.nxy_stokes;
   // par.nz_stokes = sim.par.nz_stokes;
@@ -488,7 +488,7 @@ Parameters readParameters(std::string datamain){
   in.getOption("p", InputFile::Required)>>par.p;
   in.getOption("sigma", InputFile::Required)>>par.sigma;
   in.getOption("readFile", InputFile::Optional)>>par.readFile;
-  in.getOption("wetHydrodynamicRadius", InputFile::Required)>>par.wetHydrodynamicRadius;
+  in.getOption("wetFraction", InputFile::Required)>>par.wetFraction;
   in.getOption("gw", InputFile::Required)>>par.gw;
   in.getOption("tolerance", InputFile::Optional)>>par.tolerance;
   in.getOption("permitivity", InputFile::Required)>>par.permitivity;
@@ -513,7 +513,7 @@ Parameters readParameters(std::string datamain){
 
   in.getOption("bottomWallSurfaceValue", InputFile::Optional)>>par.bottomWallSurfaceValue;
 
-  // in.getOption("hxy_stokes", InputFile::Required)>>par.hxy_stokes;
+  in.getOption("hxy_stokes", InputFile::Required)>>par.hxy_stokes;
   // in.getOption("w", InputFile::Required)>>par.w;
   // in.getOption("beta", InputFile::Required)>>par.beta;
   // in.getOption("nxy_stokes", InputFile::Required)>>par.nxy_stokes;
