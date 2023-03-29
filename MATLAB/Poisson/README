@@ -1,4 +1,0 @@
-The main file "DPSlab.m" has a section on input parameters with comments telling the user what is what. 
-There is also a comment at the top that tells the user what the answers are (phiCharges and ECharges). 
-
-See text file in the Poisson folder called "PoissonHowto.txt"
