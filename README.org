@@ -127,10 +127,8 @@ flag #An option that does not need arguments
  
  *hydrodynamicRadius*: Total hydrodynamic radius
  
- *wetHydrodynamicRadius*: The wet hydrodynamic radius, i.e., the radius given to DPStokes.
-   The dry radius is computed as  1/( 1/hydrodynamicRadius - 1/wetRadius)
-   If the wet radius is negative, full dry is considered.
-   If the wet radius is equal or smaller than the hydrodynamic radius (but positive), full wet is considered and wet radius is overriden to hydrodynamicRadius
+ *wetFraction*: between 0 and 1; wetRadius = hydrodynamicRaius/wetFrcation; dryRadius = hydrodynamicRadius/(1-wetFraction)
+   
  *dt*: Time step for the BD integrator
  
  *U0, sigma, r_m, p*: Parameters for the repulsive interaction. If U0=0 the steric repulsion is turned off.
@@ -155,6 +153,12 @@ flag #An option that does not need arguments
 
  *Nxy*: The number of cells in XY for the DPPoisson algorithm.
 
+ *fold*: 0 or 1; whether to fold the periodic box (1) or not (0).
+
+ *hxy_stokes*: grid size in the planar xy direction. It will be automatically computed if set to a negative value.
+
+ *externalField* real3: applied external electric field in the x, y, z directions.
+
  *useMobilityFromFile*: Optional, if this option is present, the mobility will depend on the height of the particle according to the data in this file.This file must have two columns with a list of normalized heights (so Z must go from -1 to 1) and normalized mobilities (i.e. 6*pi*eta*a) in X, Y and Z. The values for each particle will be linearly interpolated from the data provided in the file. The order of the values does not matter.
  Example:
 #+begin_example
@@ -169,4 +173,3 @@ flag #An option that does not need arguments
 *BrownianUpdateRule*: Optional. Can either be EulerMaruyama (default) or Leimkuhler.
 
 *idealParticles*: Optional. If this flag is present particles will not interact between them in any way.
-
