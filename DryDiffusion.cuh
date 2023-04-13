@@ -252,7 +252,7 @@ namespace dry_detail{
 //DPStokes. Parameters for a support of w=6 according to the paper
 //Note that this function does not set the temperature nor the time step.
 auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius, real h){
-  if (h < 0){
+  if (h <= 0){
     h = hydrodynamicRadius/1.554;
   }
   // std::cout << "h_xy is " << h << std::endl;

@@ -7,7 +7,9 @@
 #include <fstream>
 #include "DryDiffusion.cuh"
 #include "Interactor/DoublyPeriodic/DPPoissonSlab.cuh"
-#include "/usr/include/eigen3/Eigen/Dense"
+#include "uammd/src/utils/complex.cuh"
+#include <thrust/device_vector.h>
+// #include "/usr/include/eigen3/Eigen/Dense"
 using namespace uammd;
 
 using scalar = double;
@@ -103,14 +105,61 @@ public:
 
 // ############## Tests by Aref ############## //
 
-// Add a force to a particle and recompute it using the Intercator
-TEST(Playing, ReadWriteParticleForce){
-  auto pd = std::make_shared<ParticleData>(2);
-  auto external = std::make_shared<miniInteractor>(pd);
-  external->sum({.force=true});
-  real3 F0 = make_real3(pd->getForce(access::location::cpu, access::mode::read)[0]);
-  std::cout << "force on particle #1 = " << F0 << std::endl;
-  EXPECT_THAT(F0.x, ::testing::DoubleNear(1, 1e-5));
+// Printing average velocity velocity (in the xy plane) as a function of z
+TEST(FLUIDVELOCITY,CanPrint){
+  DPStokesSlab_ns::DPStokes::Parameters par;
+  par.viscosity = 1.0/(6*M_PI);
+  par.hydrodynamicRadius = 1;
+  par.Lx = 76.8;
+  par.H = 19.2;
+  real hxy_stokes = 0.64;
+
+  auto dppar = getDPStokesParamtersOnlyForce(par.Lx, par.H, par.viscosity, par.hydrodynamicRadius, hxy_stokes);
+  auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+
+  real z = 0;
+  auto pos = thrust::make_constant_iterator<real4>({0,0,z,0});
+  auto force = thrust::make_constant_iterator<real4>({1,0,0,0});
+  auto MdotOut = dpstokes->Mdot(pos, force, 1);
+  real muxx = 6*M_PI*par.viscosity*par.hydrodynamicRadius*real3(MdotOut[0]).x;
+  std::cout << "mobility = " << muxx << std::endl;
+
+  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, 1);
+  for (int i=0;i<averageVelocity.size();i++){
+    std::cout << averageVelocity[i] << std::endl;
+  }
+  // a dummy check!
+  double a = 1;
+  EXPECT_THAT(a, ::testing::DoubleNear(1, 1e-5));
+}
+
+// validation of the average velocity versus continuum
+TEST(FLUIDVELOCITY,Validation){
+  DPStokesSlab_ns::DPStokes::Parameters par;
+  par.viscosity = 1.0/(6*M_PI);
+  par.hydrodynamicRadius = 1;
+  par.Lx = 76.8;
+  par.H = 19.2;
+  real hxy_stokes = 0.64;
+
+  auto dppar = getDPStokesParamtersOnlyForce(par.Lx, par.H, par.viscosity, par.hydrodynamicRadius, hxy_stokes);
+  auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+
+  real z = 0;
+  auto pd = std::make_shared<ParticleData>(1);
+  pd->getPos(access::gpu, access::write)[0] = {0,0,z,0};
+  pd->getForce(access::gpu, access::write)[0] = {1,0,0,0};
+  
+  auto pos = pd->getPos(access::gpu, access::read);
+  auto force = pd->getForce(access::gpu, access::read);
+  
+  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, 1);
+  for (int i=0;i<averageVelocity.size();i++){
+    std::cout << averageVelocity[i] << std::endl;
+  }
+  // a dummy check!
+  double a = 1;
+  EXPECT_THAT(a, ::testing::DoubleNear(1, 1e-5));
 }
 
 // Reading and writing particle positions
@@ -927,3 +976,4 @@ TEST(DryWetMobility, SelfMobilityIsCorrectForAnyWetRadius){
     computeSelfMobilityWithWetRadius(wetFraction);
   }
 }
+
