@@ -9,7 +9,8 @@
 #include "Interactor/DoublyPeriodic/DPPoissonSlab.cuh"
 #include "uammd/src/utils/complex.cuh"
 #include <thrust/device_vector.h>
-// #include "/usr/include/eigen3/Eigen/Dense"
+#include <random>
+#include "/usr/include/eigen3/Eigen/Dense"
 using namespace uammd;
 
 using scalar = double;
@@ -134,32 +135,61 @@ TEST(FLUIDVELOCITY,CanPrint){
 }
 
 // validation of the average velocity versus continuum
+// Many particles are randomly placed in the simulation box with an ad-hoc force (in the x direction) on each of them that correspond to a force density; uammd solutions will be compared to the analytical solution to the 1D Stokes equation. Data will be written in 'fluidVelocity.dat' as z, uammd vel, analytical vel.
 TEST(FLUIDVELOCITY,Validation){
   DPStokesSlab_ns::DPStokes::Parameters par;
   par.viscosity = 1.0/(6*M_PI);
   par.hydrodynamicRadius = 1;
-  par.Lx = 76.8;
-  par.H = 19.2;
-  real hxy_stokes = 0.64;
+  real hxy_stokes = 0.64*par.hydrodynamicRadius;
+  par.Lx = 40;
+  par.H = 10;
 
   auto dppar = getDPStokesParamtersOnlyForce(par.Lx, par.H, par.viscosity, par.hydrodynamicRadius, hxy_stokes);
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
 
-  real z = 0;
-  auto pd = std::make_shared<ParticleData>(1);
-  pd->getPos(access::gpu, access::write)[0] = {0,0,z,0};
-  pd->getForce(access::gpu, access::write)[0] = {1,0,0,0};
-  
+  real forceDensity = 1;//f_x in the Stokes equarion: \mu\frac{d^2u}{dz^2}=-f_x
+  real packFactor = 10;
+  int numberParticles = (int)(pow(par.Lx,2)*par.H/pow(hxy_stokes,3)*packFactor);
+  std::cout << "number of farticles: " << numberParticles << std::endl;
+  real forceParticle = forceDensity*forceDensity*pow(par.Lx,2)*par.H/((real)numberParticles);
+  real loz = -0.5*par.H, rangez = par.H;
+  real loxy = 0, rangexy = par.Lx;
+  real x, y, z;
+  srand((unsigned) time(NULL));
+  auto pd = std::make_shared<ParticleData>(numberParticles);
+  std::ofstream randPosOut("randomPos.dat");
+  for (int i=0;i<numberParticles;i++){
+    z = loz+(real)rand()/(real)RAND_MAX*rangez;
+    x = loxy+(real)rand()/(real)RAND_MAX*rangexy;
+    y = loxy+(real)rand()/(real)RAND_MAX*rangexy;
+    randPosOut << x << " " << y << " " << z << std::endl;
+    pd->getPos(access::gpu, access::write)[i] = {x,y,z,0};
+    pd->getForce(access::gpu, access::write)[i] = {forceParticle,0,0,0};
+  }
+  randPosOut.close();
+
   auto pos = pd->getPos(access::gpu, access::read);
   auto force = pd->getForce(access::gpu, access::read);
   
-  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, 1);
-  for (int i=0;i<averageVelocity.size();i++){
-    std::cout << averageVelocity[i] << std::endl;
+  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, numberParticles);
+  std::ofstream out("fluidVelocity.dat");
+  // Note Chebyshev points are (b+a)/2+(b-a)/2*cos(j*pi/(nz-1)) for j = 0,1,...,nz-1
+  real a = -0.5*par.H, b = 0.5*par.H;
+  int nz = averageVelocity.size();
+  std::vector<double> averageVelocityContinuum(nz);// solution from solving the continuum Stokes sequation with a force density: u = fx*H^2/(8*mu)*(1-4(z/H)^2)
+  real zpos;
+  real err = 0;
+  for (int i=0;i<nz;i++){
+    zpos = (b+a)/2+(b-a)/2*cos(i*M_PI/(nz-1));
+    averageVelocityContinuum[i] = forceDensity*pow(par.H,2)/(8*par.viscosity)*(1-4*pow(zpos/par.H,2));
+    out << zpos/b << " " << averageVelocity[i] << " " << averageVelocityContinuum[i] << std::endl;
+    err += averageVelocityContinuum[i]!=0?pow(abs((averageVelocityContinuum[i]-averageVelocity[i])/averageVelocityContinuum[i]),2):abs(averageVelocityContinuum[i]-averageVelocity[i]);
   }
-  // a dummy check!
-  double a = 1;
-  EXPECT_THAT(a, ::testing::DoubleNear(1, 1e-5));
+  out.close();
+  // One can also plot the data to observe how the two solutions compare.
+  std::cout << "mean squared error = " << err/nz << std::endl; 
+  real tol = 0.01;
+  EXPECT_THAT(err/nz, ::testing::Le(tol));
 }
 
 // Reading and writing particle positions
