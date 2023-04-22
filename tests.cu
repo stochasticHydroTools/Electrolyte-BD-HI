@@ -10,7 +10,7 @@
 #include "uammd/src/utils/complex.cuh"
 #include <thrust/device_vector.h>
 #include <random>
-#include "/usr/include/eigen3/Eigen/Dense"
+// #include "/usr/include/eigen3/Eigen/Dense"
 using namespace uammd;
 
 using scalar = double;
@@ -125,7 +125,7 @@ TEST(FLUIDVELOCITY,CanPrint){
   real muxx = 6*M_PI*par.viscosity*par.hydrodynamicRadius*real3(MdotOut[0]).x;
   std::cout << "mobility = " << muxx << std::endl;
 
-  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, 1);
+  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, 1, 0);// 0 denotes x direction
   for (int i=0;i<averageVelocity.size();i++){
     std::cout << averageVelocity[i] << std::endl;
   }
@@ -171,7 +171,7 @@ TEST(FLUIDVELOCITY,Validation){
   auto pos = pd->getPos(access::gpu, access::read);
   auto force = pd->getForce(access::gpu, access::read);
   
-  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, numberParticles);
+  std::vector<double> averageVelocity = dpstokes->computeAverageVelocity(pos, force, numberParticles, 0);
   std::ofstream out("fluidVelocity.dat");
   // Note Chebyshev points are (b+a)/2+(b-a)/2*cos(j*pi/(nz-1)) for j = 0,1,...,nz-1
   real a = -0.5*par.H, b = 0.5*par.H;
