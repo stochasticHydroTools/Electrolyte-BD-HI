@@ -10,7 +10,7 @@
 #include "uammd/src/utils/complex.cuh"
 #include <thrust/device_vector.h>
 #include <random>
-// #include "/usr/include/eigen3/Eigen/Dense"
+#include "/usr/include/eigen3/Eigen/Dense"
 using namespace uammd;
 
 using scalar = double;
