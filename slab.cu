@@ -140,7 +140,7 @@ struct Parameters{
   real wall_U0, wall_sigma, wall_r_m, wall_p, wall_cutOff;
   real imageDistanceMultiplier;
 
-  std::string outfile, readFile, forcefile, fieldfile;
+  std::string outfile, readFile, forcefile, fieldfile, velocityfile;
   std::string mobilityFile;
 
 
@@ -315,18 +315,30 @@ template<class UsePotential> auto createShortRangeInteractor(UAMMD sim){
 }
 
 void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
-  auto pos = sim.pd->getPos(access::location::cpu, access::mode::read);
-  auto charge = sim.pd->getCharge(access::location::cpu, access::mode::read);
-  auto force = sim.pd->getForce(access::location::cpu, access::mode::read);
+  auto pos = sim.pd->getPos(access::location::gpu, access::mode::read);
+  auto charge = sim.pd->getCharge(access::location::gpu, access::mode::read);
+  auto force = sim.pd->getForce(access::location::gpu, access::mode::read);
+  
   static std::ofstream out(sim.par.outfile);
   static std::ofstream outf(sim.par.forcefile);
   static std::ofstream outfield(sim.par.fieldfile);
+  
   Box box(make_real3(sim.par.Lxy, sim.par.Lxy, sim.par.H));
   box.setPeriodicity(1,1,0);
   real3 L = box.boxSize;
-  out<<"#Lx="<<L.x*0.5<<";Ly="<<L.y*0.5<<";Lz="<<L.z*0.5<<";"<<std::endl;
+  out<<"#Lx="<<L.x<<";Ly="<<L.y<<";Lz="<<L.z<<";"<<std::endl;
   if(outf.good())outf<<"#"<<std::endl;
   if(outfield.good())outfield<<"#"<<std::endl;
+
+  static std::ofstream outvelocity(sim.par.velocityfile);
+  auto dppar = getDPStokesParamtersOnlyForce(sim.par.Lxy, sim.par.H, sim.par.viscosity, sim.par.hydrodynamicRadius, sim.par.hxy_stokes);
+  auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+  std::vector<real> averageVelocity = dpstokes->computeAverageVelocity(pos, force, sim.par.numberParticles, 0);// 0 denotes x direction
+  outvelocity <<"#" << "\n";
+  for (int j=0;j<averageVelocity.size();j++){
+    outvelocity<<averageVelocity[j]<<"\n";
+  }
+  
   fori(0, sim.par.numberParticles){
     real3 p;
     if(sim.par.fold == 1){
@@ -400,6 +412,7 @@ int main(int argc, char *argv[]){
   constexpr int saveRate = 100;
   constexpr int maximumRetries = 1e6;
   constexpr int maximumRetriesPerStep=1e4;
+  // relaxing steps
   forj(0, sim.par.relaxSteps){
     bd->forwardTime();
     if(checkWallOverlap(sim)){
@@ -415,6 +428,7 @@ int main(int argc, char *argv[]){
       restoreLastSavedConfiguration(sim);
       continue;
     }
+
     if(j%saveRate==0){
       numberRetriesThisStep = 0;
       lastStepSaved=j;
@@ -422,6 +436,8 @@ int main(int argc, char *argv[]){
     }
 
   }
+
+  // simulation steps
   Timer tim;
   tim.tic();
   lastStepSaved=0;
@@ -440,15 +456,15 @@ int main(int argc, char *argv[]){
       restoreLastSavedConfiguration(sim);
       continue;
     }
+
     if(j%saveRate==0){
-      numberRetriesThisStep=0;
+      numberRetriesThisStep = 0;
       lastStepSaved=j;
       saveConfiguration(sim);
     }
     if(sim.par.printSteps > 0 and j%sim.par.printSteps==0){
       std::vector<real4> fieldAtParticles;
       if(not sim.par.fieldfile.empty() and dpslab){
-	// System::log<System::ERROR>("This functionality is not available");
 	auto d_field = dpslab->computeFieldAtParticles();
 	fieldAtParticles.resize(d_field.size());
 	thrust::copy(d_field.begin(), d_field.end(), fieldAtParticles.begin());
@@ -457,7 +473,7 @@ int main(int argc, char *argv[]){
       numberRetriesThisStep=0;
       lastStepSaved=j;
       saveConfiguration(sim);
-    }
+    }//if print
   }
   System::log<System::MESSAGE>("Number of rejected configurations: %d (%g%% of total)", numberRetries, (double)numberRetries/(sim.par.numberSteps + sim.par.relaxSteps)*100.0);
   auto totalTime = tim.toc();
@@ -483,6 +499,7 @@ Parameters readParameters(std::string datamain){
   in.getOption("useMobilityFromFile", InputFile::Optional)>>par.mobilityFile;
   in.getOption("forcefile", InputFile::Optional)>>par.forcefile;
   in.getOption("fieldfile", InputFile::Optional)>>par.fieldfile;
+  in.getOption("velocityfile", InputFile::Required)>>par.velocityfile;
   in.getOption("U0", InputFile::Required)>>par.U0;
   in.getOption("r_m", InputFile::Required)>>par.r_m;
   in.getOption("p", InputFile::Required)>>par.p;
