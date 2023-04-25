@@ -1,5 +1,5 @@
 #+title: Dry and wet diffusion in a slit channel with electrostatic interactions.
-#+author: Raul P.Pelaez
+#+author: Raul P.Pelaez \& Aref Hashemi
 :DRAWER:
 #+OPTIONS: ^:{} toc:nil tags:nil  \n:t
 #+STARTUP: hidestars indent inlineimages latexpreview content
@@ -100,7 +100,7 @@ option [argument] #Anything after the argument is ignored
 flag #An option that does not need arguments
 ----end of data.main
 #+end_example
-
+ 
 ** The following options are available:
 
  *numberParticles*: The number of charges in the simulation
@@ -145,10 +145,12 @@ flag #An option that does not need arguments
 
  *outfile*: Positions and charge will be written to this file, each snapshot is separated by a #, each line will contain X Y Z Charge. Can be /dev/stdout to print to screen.
  
- *forcefile*: Optional, if present forces acting on particles will written to this file.
+ *forcefile*: Optional, if present forces acting on particles will be written to this file.
  
- *fieldfile*: Optional, if present electric field acting on particles will written to this file.
+ *fieldfile*: Optional, if present electric field acting on particles will be written to this file.
  
+ *velocityfile* Optional, if present average fluid velocity along the X direction will be written to this file.
+
  *readFile*: Optional, if present charge positions will be read from this file with the format X Y Z Charge. numberParticles lines will be read. Can be /dev/stdin to read from pipe.
 
  *Nxy*: The number of cells in XY for the DPPoisson algorithm.
