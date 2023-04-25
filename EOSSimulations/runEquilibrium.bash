@@ -5,6 +5,7 @@ numberSimulations=$2 # simulation will be run for $numberSimulation*tau_Eq, wher
 boxHeight=10e-9
 boxWidth=20e-9
 r_ion=2.5e-10
+wetFraction=0
 eta=8.9e-4
 dc=78.3
 dcTop=2.55 # polystyrene
@@ -32,6 +33,7 @@ source scalings.bash
 ###### dimensionless parameters for data.main ######
 ####################################################
 hydrodynamicRadius=$(echo | awk '{print '$r_ion'/'$length'}')
+hxy_stokes=$(echo | awk '{print 0.64*'$hydrodynamicRadius'}')
 wetFraction=0
 temperature=$(echo | awk '{print '$kT'/'$energy'}')
 viscosity=$(echo | awk '{print '$eta'*'$length'^3/('$energy'*'$time')}')
@@ -75,7 +77,7 @@ else
     q=1
 fi
 
-numberParticles=$(echo | awk '{print 2*int('$boxHeight'*'$boxWidth'^2*'$conc'*'$NA')+'$N_wall'}')
+numberParticles=10 #$(echo | awk '{print 2*int('$boxHeight'*'$boxWidth'^2*'$conc'*'$NA')+'$N_wall'}')
 echo $N_wall
 echo $numberParticles
 
@@ -101,6 +103,7 @@ temperature $temperature
 viscosity $viscosity
 hydrodynamicRadius $hydrodynamicRadius
 wetFraction $wetFraction
+hxy_stokes $hxy_stokes
 
 numberSteps $numberSteps
 printSteps $printSteps
@@ -127,7 +130,7 @@ Nxy 72
 imageDistanceMultiplier 1
 BrownianUpdateRule $BrownianUpdateRule
 
-hxy_stokes -1
+velocityfile fluidVelocity
 
 EOF
 }
@@ -135,9 +138,9 @@ EOF
 # initial relaxation parameters
 dt_s=$dt
 dt=$(echo | awk '{print 0.0001*'$tau'/'$time'}')
-numberSteps=1
+numberSteps=2
 printSteps=1
-relaxSteps=5000
+relaxSteps=1 #5000
 
 createDataMain data.main.relax
 
@@ -155,7 +158,7 @@ relaxSteps=$(echo $Relax_Time $dt | awk '{print int($1/$2)}')
 
 createDataMain data.main
 
-if ! test -f ../build/slab_$HOSTNAME; then echo "ERROR: This script needs slab_$HOSTNAME to be compiled and available at ../build/ " >/dev/stderr; exit 1; fi
+if ! test -f ../build/slab; then echo "ERROR: This script needs slab_$HOSTNAME to be compiled and available at ../build/ " >/dev/stderr; exit 1; fi
 
 if [ $charged -eq 0 ]; then
     DIR="Equilibrium_unchargedSurface-longrun"
@@ -168,20 +171,21 @@ mkdir -p $DIR
 bash tools/init.sh $N_wall $q > $DIR/initpos.dat
 
 {
-    cat $DIR/initpos.dat | ../build/slab_$HOSTNAME data.main.relax > $DIR/initpos-relaxed.dat 2> log.relax;
-    cat $DIR/initpos-relaxed.dat | grep -v '#' | ../build/slab_$HOSTNAME data.main > $DIR/pos.dat 2> log;
+    cat $DIR/initpos.dat | ../build/slab data.main.relax > $DIR/initpos-relaxed.dat 2> log.relax;
+    #cat $DIR/initpos-relaxed.dat | grep -v '#' | ../build/slab data.main > $DIR/pos.dat 2> log;
 } || {
     echo "ERROR: UAMMD Failed, here is the log" > /dev/stderr
-    cat log > /dev/stderr
+    cat log.relax > /dev/stderr
     exit 1
 }
 
 mv log* $DIR/
 mv data.main* $DIR/
+mv fluidVelocity $DIR/
 cp tools/init.sh $DIR/
 
-period=0.25 # the extend of time (fraction of tauEq) that will be used to cmpute the histrograms
-cd $DIR
-bash ../tools/histogramdata-equilibrium.bash $period $numberSimulations $tauEqDL
-cd ..
+# period=0.25 # the extend of time (fraction of tauEq) that will be used to cmpute the histrograms
+# cd $DIR
+# bash ../tools/histogramdata-equilibrium.bash $period $numberSimulations $tauEqDL
+# cd ..
 
