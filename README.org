@@ -149,7 +149,7 @@ flag #An option that does not need arguments
  
  *fieldfile*: Optional, if present electric field acting on particles will be written to this file.
  
- *velocityfile* Optional, if present average fluid velocity along the X direction will be written to this file.
+ *velocityfile* Average fluid velocity along the X direction will be written to this file.
 
  *readFile*: Optional, if present charge positions will be read from this file with the format X Y Z Charge. numberParticles lines will be read. Can be /dev/stdin to read from pipe.
 
