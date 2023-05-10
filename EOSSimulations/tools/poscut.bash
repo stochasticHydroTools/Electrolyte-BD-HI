@@ -13,7 +13,7 @@ t1=$(echo | awk '{print '$t1DL'*'$tauEqDL'}')
 t2=$(echo | awk '{print '$t2DL'*'$tauEqDL'}')
 step1=$(echo | awk '{print int('$t1'/('$dt'*'$printSteps'))}')
 step2=$(echo | awk '{print int('$t2'/('$dt'*'$printSteps'))}')
-echo $step1
-echo $step2
+# echo $step1
+# echo $step2
 
 awk '/#/{x=NR+'$Nprint'}(x>=NR){if (NR>'$step1'*('$N'+1) && NR<='$step2'*('$N'+1)) print $0 NR}' pos.dat > poscut$t1DL-$t2DL.dat

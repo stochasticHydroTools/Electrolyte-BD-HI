@@ -8,6 +8,7 @@
 params/results/*/
 build/
 EOSSimulations/EOS-ElectrostaticsOnly/
+EOSSimulations/Equilibrium_*/
 MATLAB-AND-python/DPFunctions/
 MATLAB-AND-python/Poisson/
 FULLDRYdisplacements.dat
