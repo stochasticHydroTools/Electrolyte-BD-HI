@@ -5,6 +5,14 @@
   interactions.
 
   In particular the DryWetBD Integrator encodes a slit channel geometry.
+  
+  Donev: Please extend the code to also allow for a single bottom wall geometry
+  as there is no reason not to have this and it should simply be adding a single flag
+  Note that this can be useful even for electrolytes since one can put a fake top wall
+  which the ions get repelled from sterically (so that they are confined)
+  but they do not feel hydrodynamically; in this case there would be no dielectric
+  jump at the top "boundary"
+  (we have done this with Raul for electrostatics to mimic a prior Monte Carlo setup)
 
   The Wet part uses the DPStokes  UAMMD module, while the Dry part has
   a selfmobility that depends on the height (thus  including thermal
@@ -62,6 +70,11 @@
   interface,  but  this   is  an  easy  modification,   which  can  be
   implemented  by  providing  the  parameters  to  DPStokes  (see  the
   constructor of the WetMobilityDPStokes class).
+  
+  Donev: If the precise wet hydrodynamic radius cannot be enforced,
+  the dry radius should be adjusted to keep the total diffusion coefficient
+  as requested by the user -- if this is not done below, fix it
+  
  */
 #include"uammd.cuh"
 #include"Integrator/BrownianDynamics.cuh"
@@ -247,6 +260,9 @@ namespace dry_detail{
   }
 }
 
+// Donev: SUPER IMPORTANT:
+// w=4 should be used not w=6! We do not need torques here
+
 //From the box size (Lxy in the  plane and H in height), viscosity and
 //a hydrodynamic radius this function returns the parameters needed by
 //DPStokes. Parameters for a support of w=6 according to the paper
@@ -261,7 +277,7 @@ auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrod
   par.nx = nxy;
   par.ny = par.nx;
   par.nz = int(M_PI*H/(2*h));
-  par.w = 6;
+  par.w = 6; // Donev: FIX this and update beta accordingly
   par.beta = 1.714*par.w;
   par.alpha = par.w*0.5;
   par.mode = DPStokesSlab_ns::WallMode::slit;
@@ -277,7 +293,14 @@ auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrod
 //DPStokesIntegrator)  use   slightly  different  structs   for  their
 //parameters. This function calls getDPStokesParameters and adapts the
 //output.
+// Donev: I do not understand what is going on and why getDPStokesIntegratorParamtersOnlyForce appears twice
+// I am also not sure where the actual grid size and the actual wet radius
+// is computed? Where-ever that happens, ensure that the total radius is unaffected
+// by the actual fluid grid size chosen
+
 using DPStokes = DPStokesSlab_ns::DPStokesIntegrator;
+// Donev: If the actual wet radius defers from the desired one
+// update with correct value and adjust dry radius to match desired total radius
 auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius, real h){
   auto par = getDPStokesParamtersOnlyForce(Lxy, H, viscosity, hydrodynamicRadius, h);
   DPStokes::Parameters pari;
@@ -288,6 +311,7 @@ auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, r
   pari.w = par.w;
   pari.beta = par.beta;
   pari.alpha = par.alpha;
+  // Donev: Add option to be either slit or bottom wall for hydro:
   pari.mode = DPStokesSlab_ns::WallMode::slit;
   pari.viscosity = par.viscosity;
   pari.Lx = par.Lx;
@@ -306,6 +330,8 @@ public:
   //This constructor requires a ParticleData instance and a WetDryParameters
   WetMobilityDPStokes(WetDryParameters par, std::shared_ptr<ParticleData> pd):
     pd(pd){
+    // Donev: If the actual wet radius defers from the desired one
+    // update with correct value and adjust dry radius to match desired total radius
     auto dpstokes_par = getDPStokesIntegratorParamtersOnlyForce(par.Lxy, par.H,
 								par.viscosity, par.wetRadius, par.hxy_stokes);
     dpstokes_par.dt = par.dt;
@@ -413,6 +439,10 @@ private:
   std::shared_ptr<WetMobility> wetMobility;
   thrust::device_vector<real3> noisePrevious; //Used to store the noise of the previous step in Leimkuhler
   update_rules brownian_rule;
+  // Donev: isFullWet should only be set to true if the actual desired diffusion
+  // coefficient is achieved by the wet diffusion DPStokes module, otherwise,
+  // use the dryDiffusion to correct
+  // This implies that the wetRadius must always be larger than the total radius
   bool isFullWet = false;
   bool isFullDry = false;
 
@@ -432,6 +462,8 @@ public:
       this->isFullDry = true;
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full dry mode");
     } else if(par.wetFraction == 1){
+      // Donev: Is par.wetRadius the actual value of the wet radius
+      // or does it need to be adjusted because grid size is not quite an integer?
       par.wetRadius = par.hydrodynamicRadius;
     } else{
       par.wetRadius = par.hydrodynamicRadius/par.wetFraction;
@@ -477,12 +509,15 @@ namespace BDWithThermalDrift_ns{
 
   //Adds to each particle the displacement coming from the dry and wet parts of the BDHI eq.
   //It encodes two update schemes.
+  // Donev: I fixed/modified this to be more clear and correct
   //Euler Maruyama
-  // dX^n = dt*( (MF + BdW + kTdiv_z(M))^n_wet + (MF + BdW + kTdiv_z(M))^n_dry)
+  // dX^n = dt*( (M^n_wet+M^n_dry)*F^n ...
+  //      + (BdW + kTdiv_X(M))^n_wet + (BdW + kTdiv_X(M))^n_dry)
   //Leimkuhler
-  // dX^n = dt*( (MF + kTdiv_z(M))^n_wet + (MF + kTdiv_z(M))^n_dry
-  //+ 0.5((BdW)^n_dry+(BdW)^{n-1}_dry)dt
-  //+ 0.5((BdW)^{n-1}_wet+(BdW)^{n-1}_wet)dt
+  // dX^n = dt*( (M^n_wet+M^n_dry)*F^n ...
+  //      + kT ((div_X(M))^n_wet + (div_X(M))^n_dry) ...
+  //      + 0.5((BdW)^n_dry+(BdW)^{n-1}_dry) ...
+  //      + 0.5((BdW)^{n-1}_wet+(BdW)^{n-1}_wet) )
   //)
   template<update_rules rule, class DryMobility>
   __global__ void integrateGPU(real4* pos,

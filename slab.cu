@@ -12,7 +12,7 @@
   2.  DryDiffusion:  An UAMMD  Integrator  that  mixes UAMMD's  Doubly
   Periodic Stokes  Integrator with  a bare-diffusion  Integrator. This
   allows   to  separate   the  mobility   in  two   parts,  one   with
-  hydro. interactions  for the far  field (expensive) and one  for the
+  hydrodynami interactions  for the far  field (expensive), and one  for the
   self mobility (fast).
 
   This source is organized as a series of functions and utility structures.
@@ -126,7 +126,9 @@ struct Parameters{
   int support = 10;
   real numberStandardDeviations = 4;
   real upsampling = 1.2;
-  real tolerance = 1e-4;
+  // Donev: I changed the tolerance to 1e-3
+  // Our DPStokes parameters only give 2 digits, 3 at the very best
+  real tolerance = 1e-3;
   real temperature;
   real permitivity, permitivityBottom, permitivityTop;
 
@@ -143,12 +145,12 @@ struct Parameters{
   std::string outfile, readFile, forcefile, fieldfile, velocityfile;
   std::string mobilityFile;
 
-
+  // Donev: Default sould be Leimkuhler
   std::string brownianUpdateRule = "EulerMaruyama";
   bool idealParticles=false;
   bool noElectrostatics=false;
-  int w = 6;
-  real beta = 10.13641758;
+  int w = 6; // Donev: FIX w=4!!!
+  real beta = 10.13641758;// Donev: FIX
   int nxy_stokes;
   int nz_stokes;
   real hxy_stokes;
@@ -332,7 +334,9 @@ void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
 
   static std::ofstream outvelocity(sim.par.velocityfile);
   auto dppar = getDPStokesParamtersOnlyForce(sim.par.Lxy, sim.par.H, sim.par.viscosity, sim.par.hydrodynamicRadius, sim.par.hxy_stokes);
+  // Donev: This seems to assume a slab geometry but I also want bottom wall supported
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+  // Donev: This seems to be the place where we finally know the actual wet radius?
   std::vector<real> averageVelocity = dpstokes->computeAverageVelocity(pos, force, sim.par.numberParticles, 0);// 0 denotes x direction
   outvelocity <<"#" << "\n";
   for (int j=0;j<averageVelocity.size();j++){
