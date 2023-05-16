@@ -9,10 +9,8 @@ params/results/*/
 build/
 EOSSimulations/EOS-ElectrostaticsOnly/
 EOSSimulations/Equilibrium_*/
+EOSSimulations/results_*/
 MATLAB-AND-python/DPFunctions/
 MATLAB-AND-python/Poisson/
-FULLDRYdisplacements.dat
-FULLWETdisplacements.dat
-uniformMob.dat
-fluidVelocity.dat
-randomPos.dat
+*.dat
+stuff/
