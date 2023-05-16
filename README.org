@@ -91,7 +91,7 @@ Gtest provides a lot of useful functionality for dealing with tests (for instanc
 * Electroosmosis (Under development!)
 The directory EOSSimulations includes bash script to run simulations of electroosmosis in nanochannels. The simulation has two components:
 ** Equilibrium
-Run by bash runEquilibrium charged numberSimulations wetFraction. Here charged can be 0 (uncharged surface) or 1 (charged surface), numberSimuations (int) is the total number of independent simulations, and 0<=wetFraction<=1 is the wet fraction.  
+Run by bash runEquilibrium.bash charged numberSimulations wetFraction. Here charged can be 0 (uncharged surface) or 1 (charged surface), numberSimuations (int) is the total number of independent simulations, and 0<=wetFraction<=1 is the wet fraction.  
 The results will be stored in DIR="Equilibrium_*Surface-longrun-wetFraction=$wetFraction"
 
 ** Electroosmosis
