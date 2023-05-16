@@ -71,10 +71,6 @@
   implemented  by  providing  the  parameters  to  DPStokes  (see  the
   constructor of the WetMobilityDPStokes class).
   
-  Donev: If the precise wet hydrodynamic radius cannot be enforced,
-  the dry radius should be adjusted to keep the total diffusion coefficient
-  as requested by the user -- if this is not done below, fix it
-  
  */
 #include"uammd.cuh"
 #include"Integrator/BrownianDynamics.cuh"
@@ -260,16 +256,14 @@ namespace dry_detail{
   }
 }
 
-// Donev: SUPER IMPORTANT:
-// w=4 should be used not w=6! We do not need torques here
 
 //From the box size (Lxy in the  plane and H in height), viscosity and
 //a hydrodynamic radius this function returns the parameters needed by
-//DPStokes. Parameters for a support of w=6 according to the paper
+//DPStokes. Parameters for a support of w=4 according to the paper
 //Note that this function does not set the temperature nor the time step.
 auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius, real h){
   if (h <= 0){
-    h = hydrodynamicRadius/1.554;
+    h = hydrodynamicRadius/1.205;
   }
   // std::cout << "h_xy is " << h << std::endl;
   int nxy = int(Lxy/h +0.5);
@@ -277,14 +271,14 @@ auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrod
   par.nx = nxy;
   par.ny = par.nx;
   par.nz = int(M_PI*H/(2*h));
-  par.w = 6; // Donev: FIX this and update beta accordingly
-  par.beta = 1.714*par.w;
+  par.w = 4;
+  par.beta = 1.785*par.w;
   par.alpha = par.w*0.5;
   par.mode = DPStokesSlab_ns::WallMode::slit;
   par.viscosity = viscosity;
   par.Lx = par.Ly = Lxy;
   par.H = H;
-  par.tolerance = 1e-4;
+  par.tolerance = 1e-3;
   return par;
 }
 

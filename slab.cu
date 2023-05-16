@@ -1,4 +1,4 @@
-/*Raul P.  Pelaez 2020-2023. Dry and  wet diffusion in a slit channel
+/*Raul P.  Pelaez and Aref Hashemi 2023. Dry and  wet diffusion in a slit channel
   with electrostatic interactions.
 
   About this code
@@ -126,8 +126,6 @@ struct Parameters{
   int support = 10;
   real numberStandardDeviations = 4;
   real upsampling = 1.2;
-  // Donev: I changed the tolerance to 1e-3
-  // Our DPStokes parameters only give 2 digits, 3 at the very best
   real tolerance = 1e-3;
   real temperature;
   real permitivity, permitivityBottom, permitivityTop;
@@ -145,12 +143,11 @@ struct Parameters{
   std::string outfile, readFile, forcefile, fieldfile, velocityfile;
   std::string mobilityFile;
 
-  // Donev: Default sould be Leimkuhler
-  std::string brownianUpdateRule = "EulerMaruyama";
+  std::string brownianUpdateRule = "Leimkuhler";
   bool idealParticles=false;
   bool noElectrostatics=false;
-  int w = 6; // Donev: FIX w=4!!!
-  real beta = 10.13641758;// Donev: FIX
+  int w = 4;
+  real beta = 7.14;
   int nxy_stokes;
   int nz_stokes;
   real hxy_stokes;
@@ -226,7 +223,7 @@ auto createIntegrator(UAMMD sim){
   par.viscosity = sim.par.viscosity;
   par.hydrodynamicRadius = sim.par.hydrodynamicRadius;
   par.dt = sim.par.dt;
-  par.wetRadius = sim.par.wetHydrodynamicRadius;
+  par.wetFraction = sim.par.wetFraction;
   par.brownianUpdateRule = string2BrownianRule(sim.par.brownianUpdateRule);
   par.dryMobilityFile = sim.par.mobilityFile;
   par.H = sim.par.H;
@@ -336,7 +333,6 @@ void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
   auto dppar = getDPStokesParamtersOnlyForce(sim.par.Lxy, sim.par.H, sim.par.viscosity, sim.par.hydrodynamicRadius, sim.par.hxy_stokes);
   // Donev: This seems to assume a slab geometry but I also want bottom wall supported
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
-  // Donev: This seems to be the place where we finally know the actual wet radius?
   std::vector<real> averageVelocity = dpstokes->computeAverageVelocity(pos, force, sim.par.numberParticles, 0);// 0 denotes x direction
   outvelocity <<"#" << "\n";
   for (int j=0;j<averageVelocity.size();j++){
