@@ -263,16 +263,15 @@ namespace dry_detail{
 //Note that this function does not set the temperature nor the time step.
 auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius, real h){
   if (h <= 0){
-    h = hydrodynamicRadius/1.205;
+    h = hydrodynamicRadius/1.205;//1.554;
   }
-  // std::cout << "h_xy is " << h << std::endl;
-  int nxy = int(Lxy/h +0.5);
+  int nxy = int(Lxy/h+0.5);
   DPStokesSlab_ns::DPStokes::Parameters par;
   par.nx = nxy;
   par.ny = par.nx;
   par.nz = int(M_PI*H/(2*h));
-  par.w = 4;
-  par.beta = 1.785*par.w;
+  par.w = 4;//6;
+  par.beta = 1.785*par.w;//1.714*par.w;
   par.alpha = par.w*0.5;
   par.mode = DPStokesSlab_ns::WallMode::slit;
   par.viscosity = viscosity;
@@ -299,7 +298,6 @@ auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, r
   auto par = getDPStokesParamtersOnlyForce(Lxy, H, viscosity, hydrodynamicRadius, h);
   DPStokes::Parameters pari;
   pari.nx = par.nx;
-  // std::cout << "pari.nx = " << pari.nx << std::endl;
   pari.ny = par.ny;
   pari.nz = par.nz;
   pari.w = par.w;
@@ -311,6 +309,7 @@ auto getDPStokesIntegratorParamtersOnlyForce(real Lxy, real H, real viscosity, r
   pari.Lx = par.Lx;
   pari.Ly= par.Ly;
   pari.H = H;
+  pari.tolerance = par.tolerance;
   return pari;
 }
 
@@ -324,8 +323,6 @@ public:
   //This constructor requires a ParticleData instance and a WetDryParameters
   WetMobilityDPStokes(WetDryParameters par, std::shared_ptr<ParticleData> pd):
     pd(pd){
-    // Donev: If the actual wet radius defers from the desired one
-    // update with correct value and adjust dry radius to match desired total radius
     auto dpstokes_par = getDPStokesIntegratorParamtersOnlyForce(par.Lxy, par.H,
 								par.viscosity, par.wetRadius, par.hxy_stokes);
     dpstokes_par.dt = par.dt;
@@ -456,8 +453,6 @@ public:
       this->isFullDry = true;
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full dry mode");
     } else if(par.wetFraction == 1){
-      // Donev: Is par.wetRadius the actual value of the wet radius
-      // or does it need to be adjusted because grid size is not quite an integer?
       par.wetRadius = par.hydrodynamicRadius;
     } else{
       par.wetRadius = par.hydrodynamicRadius/par.wetFraction;
@@ -468,7 +463,6 @@ public:
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Dry radius is: %g", dryRadius);
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Wet radius is: %g", par.wetRadius);
       if(par.dryMobilityFile.empty()){
-  	// std::cout << "dryMobilityFile empty!" << std::endl;
   	sys->log<System::MESSAGE>("[BDWithThermalDrift] Computing self mobility data using DPStokes ");
   	auto mobilityData = computeMobilityDataForDryDiffusion(par, dryRadius);
   	dryMobility = std::make_shared<DryMobility>(par.viscosity, dryRadius, mobilityData, par.H);
@@ -479,13 +473,15 @@ public:
       }
     } else{
       sys->log<System::MESSAGE>("[BDWithThermalDrift] Enabling full wet mode");
+      sys->log<System::MESSAGE>("[BDWithThermalDrift] Dry radius is: %g", dryRadius);
+      sys->log<System::MESSAGE>("[BDWithThermalDrift] Wet radius is: %g", par.wetRadius);
       this->isFullWet = true;
       dryMobility = std::make_shared<DryMobility>(); //A dummy instance
     }
     if(not isFullDry){
       wetMobility = std::make_shared<WetMobility>(par, pd);
     }
-  }
+  }//BaseBrow*Integ*
 
   void forwardTime() override;
 
