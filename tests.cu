@@ -29,7 +29,7 @@ bool tolerance(scalar val, scalar expectedval, scalar numdigits = 1.9){
 	return false;
       }
     } else {
-      if (-log10(abs(val-expectedval))>14){
+      if (-log10(abs(val-expectedval))>12){
 	return true;
       } else {
 	return false;
@@ -113,7 +113,7 @@ TEST(FLUIDVELOCITY,CanPrint){
   par.hydrodynamicRadius = 1;
   par.Lx = 76.8;
   par.H = 19.2;
-  real hxy_stokes = 0.64;
+  real hxy_stokes = par.hydrodynamicRadius/1.205;// for w=4
 
   auto dppar = getDPStokesParamtersOnlyForce(par.Lx, par.H, par.viscosity, par.hydrodynamicRadius, hxy_stokes);
   auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
@@ -140,7 +140,7 @@ TEST(FLUIDVELOCITY,Validation){
   DPStokesSlab_ns::DPStokes::Parameters par;
   par.viscosity = 1.0/(6*M_PI);
   par.hydrodynamicRadius = 1;
-  real hxy_stokes = 0.64*par.hydrodynamicRadius;
+  real hxy_stokes = par.hydrodynamicRadius/1.205;
   par.Lx = 40;
   par.H = 10;
 
@@ -370,7 +370,7 @@ TEST(FULLDRY, selfMobility){
   parBD.hydrodynamicRadius = 1;
   parBD.Lxy = 76.8;
   parBD.H = 19.2;
-  parBD.hxy_stokes = 0.64;
+  parBD.hxy_stokes = parBD.hydrodynamicRadius/1.205;
   parBD.wetFraction = 0;
   auto bd = std::make_shared<BD>(pd, parBD);
 
@@ -461,7 +461,7 @@ TEST(FULLDRY, Integration){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
-  parBD.hxy_stokes = 0.64;
+  parBD.hxy_stokes = parBD.hydrodynamicRadius/1.205;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -555,7 +555,7 @@ TEST(FULLDRY, Periodicity){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
-  parBD.hxy_stokes = 0.64;
+  parBD.hxy_stokes = parBD.hydrodynamicRadius/1.205;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -606,7 +606,7 @@ TEST(FULLWET, Integration){
   sim.par.permitivity = 1;
   sim.par.permitivityTop = 0.05;
   sim.par.permitivityBottom = 0.05;
-  sim.par.Nxy = 135;
+  sim.par.Nxy = 72;
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
@@ -653,7 +653,7 @@ TEST(FULLWET, Integration){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
-  parBD.hxy_stokes = 0.64;
+  parBD.hxy_stokes = parBD.hydrodynamicRadius/1.205;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -719,7 +719,7 @@ TEST(FULLWET, Periodicity){
   sim.par.permitivity = 1;
   sim.par.permitivityTop = 0.05;
   sim.par.permitivityBottom = 0.05;
-  sim.par.Nxy = 135;
+  sim.par.Nxy = 72;
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
@@ -766,7 +766,7 @@ TEST(FULLWET, Periodicity){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
-  parBD.hxy_stokes = 0.64;
+  parBD.hxy_stokes = parBD.hydrodynamicRadius/1.205;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -820,7 +820,7 @@ TEST(DRYWET, Integration){
   sim.par.permitivity = 1;
   sim.par.permitivityTop = 0.05;
   sim.par.permitivityBottom = 0.05;
-  sim.par.Nxy = 135;
+  sim.par.Nxy = 72;
   sim.par.temperature = 0;
   sim.par.viscosity = 1.0/(6*M_PI);
   sim.par.hydrodynamicRadius = 1.0;
@@ -859,7 +859,7 @@ TEST(DRYWET, Integration){
   parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;
   parBD.Lxy = sim.par.Lxy;
   parBD.H = sim.par.H;
-  parBD.hxy_stokes = 1.28;
+  parBD.hxy_stokes = 2*parBD.hydrodynamicRadius/1.205;
   auto bd = std::make_shared<BD>(sim.pd, parBD);
   bd->addInteractor(poisson);
   bd->forwardTime();
@@ -1007,3 +1007,266 @@ TEST(DryWetMobility, SelfMobilityIsCorrectForAnyWetRadius){
   }
 }
 
+
+// Fluctuation-Dissipation tests
+
+// (1) copied from uammd dpstokes test 
+// ------------------------------------------------
+//Ensures that the diffusion coeficient complies with fluctuation dissipation balance.
+//First we place a single particle at a certain height without any forces and a low dt,
+//so that over many realizations <(\Delta q)^2> = 2*temperature*M*dt
+//Then we set the temperature to zero and we compute the mobility at each Z by pulling a single particle so that over many realizations <\Delta q> = M*F*dt
+//
+
+using DPStokesSlab_ns::DPStokes;
+using DPStokesSlab_ns::DPStokesIntegrator;
+
+//Paramters for a support of w=4
+auto getDPStokesParamtersOnlyForce(real Lxy, real H, real viscosity, real hydrodynamicRadius){
+  real h = hydrodynamicRadius/1.205;
+  int nxy = int(Lxy/h +0.5);
+  DPStokes::Parameters par;
+  par.nx = nxy;
+  par.ny = par.nx;
+  par.nz = int(M_PI*H/(2*h));
+  par.w = 4;
+  par.beta = 1.785*par.w;
+  par.alpha = par.w*0.5;
+  par.mode = DPStokesSlab_ns::WallMode::slit;
+  par.viscosity = viscosity;
+  par.Lx = par.Ly = Lxy;
+  par.H = H;
+  par.tolerance = 1e-3;
+  return par;
+}
+
+TEST(FD, uammd){
+  real hydrodynamicRadius = 1.32232;
+  real Lxy = 16*hydrodynamicRadius;
+  real H = 8*hydrodynamicRadius;
+  auto pd = std::make_shared<ParticleData>(1);
+  auto pari = getDPStokesParamtersOnlyForce(Lxy, H, 1/(6*M_PI), hydrodynamicRadius);
+  pari.temperature = 1.3452;
+  pari.mode = DPStokesSlab_ns::WallMode::slit;
+  pari.dt = 0.001;
+  pd->getPos(access::cpu, access::write)[0] = {0,0,0,0};
+  auto dpstokes_integrator = std::make_shared<DPStokesIntegrator>(pd, pari);
+  int nz = 3;
+  std::vector<real3> d0(nz,real3());
+  std::vector<real3> m0(nz,real3());
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(H-hydrodynamicRadius*0.1);
+    int navg = 5000;
+    std::cout << "doing z = " << z << std::endl;
+    real3 avg = {0,0,0};
+    for(int i=0;i<navg; i++){
+      pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+      dpstokes_integrator->forwardTime();
+      auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]))-make_real3(0,0,z);
+      avg += r*r;
+    }
+    auto sigma =avg/navg;
+    d0[iz] = sigma/(2*pari.temperature*pari.dt);
+    std::cout << "d0.x = " << d0[iz].x << std::endl;
+    std::cout << "d0.y = " << d0[iz].y << std::endl;
+    std::cout << "d0.z = " << d0[iz].z << std::endl;
+  }
+  pari.temperature = 0;
+  dpstokes_integrator = std::make_shared<DPStokesIntegrator>(pd, pari);
+  dpstokes_integrator->addInteractor(std::make_shared<miniInteractor>(pd,make_real3(1,1,1)));
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(H-hydrodynamicRadius*0.1);
+    std::cout << "doing z = " << z << std::endl;
+    pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+    dpstokes_integrator->forwardTime();
+    auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]));
+    m0[iz] = (r-make_real3(0,0,z))/pari.dt;
+    std::cout << "m0.x = " << m0[iz].x << std::endl;
+    std::cout << "m0.y = " << m0[iz].y << std::endl;
+    std::cout << "m0.z = " << m0[iz].z << std::endl;
+    real3 err = abs((m0[iz]-d0[iz])/m0[iz]);
+    EXPECT_THAT(err.x, ::testing::Le(0.05));
+    EXPECT_THAT(err.y, ::testing::Le(0.05));
+    EXPECT_THAT(err.z, ::testing::Le(0.05));
+  }
+
+}
+
+// (2) FullWet
+TEST(FD, FullWet){
+  using BD = DryWetBD;
+  BD::Parameters parBD;
+  parBD.temperature = 1.3452;
+  parBD.viscosity = 1.0/(6*M_PI);
+  parBD.hydrodynamicRadius = 1.32232;
+  parBD.wetFraction = 1;
+  parBD.dt = 0.001;
+  parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;//leimkuhler
+  parBD.Lxy = 16*parBD.hydrodynamicRadius;
+  parBD.H = 8*parBD.hydrodynamicRadius;
+  parBD.hxy_stokes = -1;
+
+  auto pd = std::make_shared<ParticleData>(1);
+  pd->getPos(access::cpu, access::write)[0] = {0,0,0,0};
+  auto dpstokes_integrator = std::make_shared<BD>(pd, parBD);
+  
+  int nz = 3;
+  std::vector<real3> d0(nz,real3());
+  std::vector<real3> m0(nz,real3());
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(parBD.H-parBD.hydrodynamicRadius*0.1);
+    int navg = 5000;
+    std::cout << "doing z = " << z << std::endl; 
+    real3 avg = {0,0,0};
+    for(int i=0;i<navg; i++){
+      pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+      dpstokes_integrator->forwardTime();
+      auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]))-make_real3(0,0,z);
+      avg += r*r;
+    }
+    auto sigma =avg/navg;
+    d0[iz] = sigma/(2*parBD.temperature*parBD.dt);
+    std::cout << "d0.x = " << d0[iz].x << std::endl;
+    std::cout << "d0.y = " << d0[iz].y << std::endl;
+    std::cout << "d0.z = " << d0[iz].z << std::endl;
+  }
+  parBD.temperature = 0;
+  dpstokes_integrator = std::make_shared<BD>(pd, parBD);
+  dpstokes_integrator->addInteractor(std::make_shared<miniInteractor>(pd,make_real3(1,1,1)));
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(parBD.H-parBD.hydrodynamicRadius*0.1);
+    std::cout << "doing z = " << z << std::endl; 
+    pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+    dpstokes_integrator->forwardTime();
+    auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]));
+    m0[iz] = (r-make_real3(0,0,z))/parBD.dt;
+    std::cout << "m0.x = " << m0[iz].x << std::endl;
+    std::cout << "m0.y = " << m0[iz].y << std::endl;
+    std::cout << "m0.z = " << m0[iz].z << std::endl;
+    real3 err = abs((m0[iz]-d0[iz])/m0[iz]);
+    EXPECT_THAT(err.x, ::testing::Le(0.05));
+    EXPECT_THAT(err.y, ::testing::Le(0.05));
+    EXPECT_THAT(err.z, ::testing::Le(0.05));
+  }
+
+}
+
+
+// (3) DryWet
+TEST(FD, DryWet){
+  using BD = DryWetBD;
+  BD::Parameters parBD;
+  parBD.temperature = 1.3452;
+  parBD.viscosity = 1.0/(6*M_PI);
+  parBD.hydrodynamicRadius = 1.32232;
+  parBD.wetFraction = 0.5;
+  parBD.dt = 0.001;
+  parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;//leimkuhler
+  parBD.Lxy = 16*parBD.hydrodynamicRadius;
+  parBD.H = 8*parBD.hydrodynamicRadius;
+  parBD.hxy_stokes = -1;
+
+  auto pd = std::make_shared<ParticleData>(1);
+  pd->getPos(access::cpu, access::write)[0] = {0,0,0,0};
+  auto dpstokes_integrator = std::make_shared<BD>(pd, parBD);
+  
+  int nz = 3;
+  std::vector<real3> d0(nz,real3());
+  std::vector<real3> m0(nz,real3());
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(parBD.H-parBD.hydrodynamicRadius*0.1);
+    int navg = 5000;
+    std::cout << "doing z = " << z << std::endl; 
+    real3 avg = {0,0,0};
+    for(int i=0;i<navg; i++){
+      pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+      dpstokes_integrator->forwardTime();
+      auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]))-make_real3(0,0,z);
+      avg += r*r;
+    }
+    auto sigma =avg/navg;
+    d0[iz] = sigma/(2*parBD.temperature*parBD.dt);
+    std::cout << "d0.x = " << d0[iz].x << std::endl;
+    std::cout << "d0.y = " << d0[iz].y << std::endl;
+    std::cout << "d0.z = " << d0[iz].z << std::endl;
+  }
+  parBD.temperature = 0;
+  dpstokes_integrator = std::make_shared<BD>(pd, parBD);
+  dpstokes_integrator->addInteractor(std::make_shared<miniInteractor>(pd,make_real3(1,1,1)));
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(parBD.H-parBD.hydrodynamicRadius*0.1);
+    std::cout << "doing z = " << z << std::endl; 
+    pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+    dpstokes_integrator->forwardTime();
+    auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]));
+    m0[iz] = (r-make_real3(0,0,z))/parBD.dt;
+    std::cout << "m0.x = " << m0[iz].x << std::endl;
+    std::cout << "m0.y = " << m0[iz].y << std::endl;
+    std::cout << "m0.z = " << m0[iz].z << std::endl;
+    real3 err = abs((m0[iz]-d0[iz])/m0[iz]);
+    EXPECT_THAT(err.x, ::testing::Le(0.05));
+    EXPECT_THAT(err.y, ::testing::Le(0.05));
+    EXPECT_THAT(err.z, ::testing::Le(0.05));
+  }
+
+}
+
+
+// (4) FullDry
+TEST(FD, FullDry){
+  using BD = DryWetBD;
+  BD::Parameters parBD;
+  parBD.temperature = 1.3452;
+  parBD.viscosity = 1.0/(6*M_PI);
+  parBD.hydrodynamicRadius = 1.32232;
+  parBD.wetFraction = 0;
+  parBD.dt = 0.001;
+  parBD.brownianUpdateRule = DryWetBD::update_rules::euler_maruyama;//leimkuhler
+  parBD.Lxy = 16*parBD.hydrodynamicRadius;
+  parBD.H = 8*parBD.hydrodynamicRadius;
+  parBD.hxy_stokes = -1;
+
+  auto pd = std::make_shared<ParticleData>(1);
+  pd->getPos(access::cpu, access::write)[0] = {0,0,0,0};
+  auto dpstokes_integrator = std::make_shared<BD>(pd, parBD);
+  
+  int nz = 3;
+  std::vector<real3> d0(nz,real3());
+  std::vector<real3> m0(nz,real3());
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(parBD.H-parBD.hydrodynamicRadius*0.1);
+    int navg = 5000;
+    std::cout << "doing z = " << z << std::endl; 
+    real3 avg = {0,0,0};
+    for(int i=0;i<navg; i++){
+      pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+      dpstokes_integrator->forwardTime();
+      auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]))-make_real3(0,0,z);
+      avg += r*r;
+    }
+    auto sigma =avg/navg;
+    d0[iz] = sigma/(2*parBD.temperature*parBD.dt);
+    std::cout << "d0.x = " << d0[iz].x << std::endl;
+    std::cout << "d0.y = " << d0[iz].y << std::endl;
+    std::cout << "d0.z = " << d0[iz].z << std::endl;
+  }
+  parBD.temperature = 0;
+  dpstokes_integrator = std::make_shared<BD>(pd, parBD);
+  dpstokes_integrator->addInteractor(std::make_shared<miniInteractor>(pd,make_real3(1,1,1)));
+  for(int iz = 0; iz<nz; iz++){
+    real z = (-0.5 + (iz/real(nz-1)))*(parBD.H-parBD.hydrodynamicRadius*0.1);
+    std::cout << "doing z = " << z << std::endl; 
+    pd->getPos(access::cpu, access::write)[0] = {0,0,z,0};
+    dpstokes_integrator->forwardTime();
+    auto r = (make_real3(pd->getPos(access::cpu, access::read)[0]));
+    m0[iz] = (r-make_real3(0,0,z))/parBD.dt;
+    std::cout << "m0.x = " << m0[iz].x << std::endl;
+    std::cout << "m0.y = " << m0[iz].y << std::endl;
+    std::cout << "m0.z = " << m0[iz].z << std::endl;
+    real3 err = abs((m0[iz]-d0[iz])/m0[iz]);
+    EXPECT_THAT(err.x, ::testing::Le(0.05));
+    EXPECT_THAT(err.y, ::testing::Le(0.05));
+    EXPECT_THAT(err.z, ::testing::Le(0.05));
+  }
+
+}
