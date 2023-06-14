@@ -65,7 +65,7 @@ externalFieldy=0
 externalFieldz=0
 
 ####################################################
-BrownianUpdateRule=Leimkuhler
+BrownianUpdateRule=Leimkuhler #EulerMaruyama
 
 echo "Dimensional surface charge (C/m^2) = " $surfaceChargeDimensional
 N_wall=$(echo | awk '{print int(sqrt(('$surfaceChargeDimensional')^2)*('$boxWidth')^2/'$elemCharge')}')
@@ -170,12 +170,8 @@ mkdir -p $DIR
 bash tools/init.sh $N_wall $q > $DIR/initpos.dat
 
 {
-    t0=$SECONDS
     cat $DIR/initpos.dat | ../build/slab data.main.relax > $DIR/initpos-relaxed.dat 2> log.relax;
-    tElapsed=$(echo | awk '{print ('$SECONDS'-'$t0')/60}')
-    message=$(echo "Simulation time for 500 steps + initialization is " $tElapsed " min.")
-    echo $message
-    echo $message > SimTimerelax_minutes.dat
+    echo "Done with relaxation"
     mv fluidVelocity fluidVelocity.relax;  
     cat $DIR/initpos-relaxed.dat | grep -v '#' | ../build/slab data.main > $DIR/pos.dat 2> log;
 } || {
@@ -187,11 +183,9 @@ bash tools/init.sh $N_wall $q > $DIR/initpos.dat
 mv log* $DIR/
 mv data.main* $DIR/
 mv fluidVelocity* $DIR/
-mv SimTimerelax_minutes.dat $DIR/
 cp tools/init.sh $DIR/
 
 period=0.25 # the extend of time (fraction of tauEq) that will be used to cmpute the histrograms
 cd $DIR
 bash ../tools/histogramdata-equilibrium.bash $period $numberSimulations $tauEqDL
 cd ..
-
