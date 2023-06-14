@@ -143,7 +143,7 @@ struct Parameters{
   std::string outfile, readFile, forcefile, fieldfile, velocityfile;
   std::string mobilityFile;
 
-  std::string brownianUpdateRule = "Leimkuhler";
+  std::string brownianUpdateRule = "Leimkuhler";//"EulerMaruyama";
   bool idealParticles=false;
   bool noElectrostatics=false;
   int w = 4;
@@ -314,10 +314,6 @@ template<class UsePotential> auto createShortRangeInteractor(UAMMD sim){
 }
 
 void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
-  auto pos = sim.pd->getPos(access::location::gpu, access::mode::read);
-  auto charge = sim.pd->getCharge(access::location::gpu, access::mode::read);
-  auto force = sim.pd->getForce(access::location::gpu, access::mode::read);
-  
   static std::ofstream out(sim.par.outfile);
   static std::ofstream outf(sim.par.forcefile);
   static std::ofstream outfield(sim.par.fieldfile);
@@ -332,12 +328,22 @@ void writeSimulation(UAMMD sim, std::vector<real4> fieldAtParticles){
   static std::ofstream outvelocity(sim.par.velocityfile);
   auto dppar = getDPStokesParamtersOnlyForce(sim.par.Lxy, sim.par.H, sim.par.viscosity, sim.par.hydrodynamicRadius, sim.par.hxy_stokes);
   // Donev: This seems to assume a slab geometry but I also want bottom wall supported
-  auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
-  std::vector<real> averageVelocity = dpstokes->computeAverageVelocity(pos, force, sim.par.numberParticles, 0);// 0 denotes x direction
-  outvelocity <<"#" << "\n";
-  for (int j=0;j<averageVelocity.size();j++){
-    outvelocity<<averageVelocity[j]<<"\n";
+  {
+    auto pos = sim.pd->getPos(access::location::gpu, access::mode::read);
+    auto charge = sim.pd->getCharge(access::location::gpu, access::mode::read);
+    auto force = sim.pd->getForce(access::location::gpu, access::mode::read);
+
+    auto dpstokes = std::make_shared<DPStokesSlab_ns::DPStokes>(dppar);
+    std::vector<real> averageVelocity = dpstokes->computeAverageVelocity(pos, force, sim.par.numberParticles, 0);// 0 denotes x direction
+    outvelocity <<"#" << "\n";
+    for (int j=0;j<averageVelocity.size();j++){
+      outvelocity<<averageVelocity[j]<<"\n";
+    }
   }
+
+  auto pos = sim.pd->getPos(access::location::cpu, access::mode::read); 
+  auto charge = sim.pd->getCharge(access::location::cpu, access::mode::read); 
+  auto force = sim.pd->getForce(access::location::cpu, access::mode::read); 
   
   fori(0, sim.par.numberParticles){
     real3 p;
@@ -456,7 +462,6 @@ int main(int argc, char *argv[]){
       restoreLastSavedConfiguration(sim);
       continue;
     }
-
     if(j%saveRate==0){
       numberRetriesThisStep = 0;
       lastStepSaved=j;
