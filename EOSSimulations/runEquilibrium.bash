@@ -183,6 +183,7 @@ bash tools/init.sh $N_wall $q > $DIR/initpos.dat
 mv log* $DIR/
 mv data.main* $DIR/
 mv fluidVelocity* $DIR/
+cp runEquilibrium.bash $DIR/
 cp tools/init.sh $DIR/
 
 period=0.25 # the extend of time (fraction of tauEq) that will be used to cmpute the histrograms
