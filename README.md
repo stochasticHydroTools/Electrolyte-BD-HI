@@ -80,22 +80,24 @@ Several unit tests are available in tests.cu. They use [Gtest](https://github.co
 Gtest provides a lot of useful functionality for dealing with tests (for instance, running only a subset of them). Try ./tests &#x2013;help  
 
 
-# Electroosmosis (Under development!)
+# Electroosmosis
 
-The directory EOSSimulations includes bash script to run simulations of electroosmosis in nanochannels. The simulation has two components:  
+The directory EOSSimulations includes bash scripts to run simulations of electroosmosis in nanochannels. The simulation has two components:  
 
 
 ## Equilibrium
 
-Run by `bash runEquilibrium.bash charged numberSimulations wetFraction`. Here charged can be 0 (uncharged surface) or 1 (charged surface), numberSimuations (int) is the total number of independent simulations, and 0<=wetFraction<=1 is the wet fraction.  
-The results will be stored in DIR="Equilibrium\_\*Surface-longrun-wetFraction=$wetFraction"  
-
+Run by `bash runEquilibrium.bash charged numberSimulations wetFraction`. Here charged can be 0 (uncharged surface) or 1 (charged surface), numberSimuations (int) is the total number of independent simulations, and 0<=wetFraction<=1 is the wet fraction. The results will be stored in DIR="Equilibrium\_\*Surface-longrun"  
 
 ## Electroosmosis
 
-This should be run after equilibrium. The corresponding bash script runEOS.bash is currently under testing. The bash script postprocessing.bash is also being tested.  
+This should be run after equilibrium. The corresponding equilibrium distribution results directory (i.e., "Equilibrium\_\*Surface-longrun") should be available in EOSSimulations/. Run by `bash runEOS.bash charged numberSimulations wetFraction`.
 
-The subdirectory Analysis includes MATLAB scripts to plot the data. Sample equilibrium distributions of the counterions are provided.  
+## Postprocessing
+
+Run by `bash postprocessing.bash charged numberSimulations`. The equilibrium and all of the electroosmosis (i.e., "EOS_*") results directories should be available in EOSSimulations/.
+
+The subdirectory Analysis includes MATLAB scripts to plot the data. Sample plots are provided.  
 
 
 # USAGE:
