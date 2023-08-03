@@ -3,8 +3,8 @@ numberSimulations=$2 # simulation will be run for $numberSimulation*tau_Eq, wher
 wetFraction=$3
 
 # Dimensional parameters
-boxHeight=10e-9
-boxWidth=20e-9
+boxHeight=2.07469e-9
+boxWidth=8.29875e-9
 r_ion=2.5e-10
 eta=8.9e-4
 dc=78.3
