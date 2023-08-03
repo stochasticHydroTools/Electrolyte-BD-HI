@@ -5,13 +5,9 @@
 *bbl
 *blg
 *out
-params/results/*/
 build/
 EOSSimulations/EOS-ElectrostaticsOnly/
-EOSSimulations/Equilibrium_*/
-EOSSimulations/results_*/
+EOSSimulations/results/
 MATLAB-AND-python/DPFunctions/
 MATLAB-AND-python/Poisson/
-*.dat
 stuff/
-results/
