@@ -1,13 +1,14 @@
 charged=$1
 numberSimulations=$2
+wetFraction=$3
+
 if [ $charged -eq 0 ]; then
     EqDIR="Equilibrium_unchargedSurface-longrun"
 elif [ $charged -eq 1 ]; then
     EqDIR="Equilibrium_chargedSurface-longrun"
 fi
 
-wetFraction=0.5
-script="runEquilibrium.bash"
+script=$EqDIR"/runEquilibrium.bash"
 r_ion=$(cat $script | awk -F "=" '/r_ion=/{print $2}')
 eta=$(cat $script | awk -F "=" '/eta=/{print $2}')
 elemCharge=$(cat $script | awk -F "=" '/elemCharge=/{print $2}')
@@ -18,7 +19,7 @@ tau=$(echo | awk '{printf "%.14g\n", '$r_ion'^2/'$D'}')
 tauEq=$(echo | awk '{printf "%.14g\n", '$boxHeight'^2/'$D'}')
 source scalings.bash
 tauEqDL=$(echo | awk '{printf "%.14g\n", '$tauEq'/'$time'}')
-dtCoeff=0.05
+dtCoeff=0.2
 dt=$(echo | awk '{print '$dtCoeff'*'$tau'/'$time'}')
 
 dc=$(cat $script | awk -F "=" '/dc=/{print $2}')
@@ -42,9 +43,9 @@ relaxSteps=$(echo $Relax_Time $dt | awk '{print int($1/$2)}')
 
 cd $EqDIR
 bash ../tools/equilibrium-configuration-extract.bash pos.dat $numberSimulations $tauEqDL
-cd ..
+cd -
 
-listOfEmaxCoeff="0.01 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1"
+listOfEmaxCoeff="0.01 0.05 0.1 0.2 0.5 1"
 for EmaxCoeff in $listOfEmaxCoeff
 do
     
@@ -74,12 +75,12 @@ elif [ $charged -eq 1 ]; then
 fi
 mkdir -p $DIR
 
-if ! test -f ../build/slab_$HOSTNAME; then echo "ERROR: This script needs slab_$HOSTNAME to be compiled and available at ../buil/ " >/dev/stderr; exit 1; fi
+if ! test -f ../build/slab; then echo "ERROR: This script needs slab to be compiled and available at ../build/ " >/dev/stderr; exit 1; fi
 
 for i in $(seq 1 $numberSimulations)
 do
     {
-    	cat $EqDIR/eqpos$i.dat | ../DPPoissonTests/poisson_$HOSTNAME data.main > $DIR/pos.$i.dat 2> log;
+    	cat $EqDIR/eqpos$i.dat | ../build/slab data.main > $DIR/pos.$i.dat 2> log;
     } || {
     	echo "ERROR: UAMMD Failed, here is the log" > /dev/stderr
     	cat log > /dev/stderr
@@ -89,4 +90,5 @@ done
 
 mv data.main $DIR
 mv log $DIR
+mv fluidVelocity $DIR
 done

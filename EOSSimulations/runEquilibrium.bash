@@ -160,9 +160,9 @@ createDataMain data.main
 if ! test -f ../build/slab; then echo "ERROR: This script needs slab to be compiled and available at ../build/ " >/dev/stderr; exit 1; fi
 
 if [ $charged -eq 0 ]; then
-    DIR="Equilibrium_unchargedSurface-longrun-wetFraction=$wetFraction"
+    DIR="Equilibrium_unchargedSurface-longrun"
 elif [ $charged -eq 1 ]; then
-    DIR="Equilibrium_chargedSurface-longrun-wetFraction=$wetFraction"
+    DIR="Equilibrium_chargedSurface-longrun"
 fi
 
 mkdir -p $DIR

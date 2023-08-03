@@ -1,6 +1,12 @@
 charged=$1
 numberSimulations=$2
-script="runEquilibrium.bash"
+if [ $charged -eq 0 ]; then
+    EqDIR="Equilibrium_unchargedSurface-longrun"
+elif [ $charged -eq 1 ]; then
+    EqDIR="Equilibrium_chargedSurface-longrun"
+fi
+
+script=$EqDIR"/runEquilibrium.bash"
 r_ion=$(cat $script | awk -F "=" '/r_ion=/{print $2}')
 eta=$(cat $script | awk -F "=" '/eta=/{print $2}')
 elemCharge=$(cat $script | awk -F "=" '/elemCharge=/{print $2}')
@@ -25,7 +31,7 @@ ESIcoeff=$(echo | awk '{print '$energy'/('$charge'*'$length')}')
 
 rm Current-vs-E-SI.dat 2> /dev/null || true
 
-listOfEmaxCoeff="0.01 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1"
+listOfEmaxCoeff="0.01 0.05 0.1 0.2 0.5 1"
 for EmaxCoeff in $listOfEmaxCoeff
 do
 
